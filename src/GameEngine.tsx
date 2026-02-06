@@ -957,9 +957,9 @@ const GameEngine = () => {
                                 ctx.clip()
 
                                 const spriteAspect = towerSprite.width / towerSprite.height
-                                // Scale to fill the obstacle area - use height as the primary dimension
-                                const targetH = oh
-                                const targetW = targetH * spriteAspect
+                                // Fixed width, calculate height from aspect ratio - clipping handles the rest
+                                const targetW = ow * 1.8
+                                const targetH = targetW / spriteAspect
 
                                 if (isTop) {
                                     // Top obstacle: flip vertically, align bottom of sprite to bottom of obstacle area
