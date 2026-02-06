@@ -8,6 +8,12 @@ const GameEngine = () => {
     const [canvasSize, setCanvasSize] = useState({ width: 400, height: 600 })
     const [isMuted, setIsMuted] = useState(false)
 
+    // Mobile detection for performance optimization
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768
+    const lastFrameTime = useRef(0)
+    const targetFPS = isMobile ? 30 : 60
+    const frameInterval = 1000 / targetFPS
+
     // Game Constants (will be scaled based on canvas size)
     const BASE_HEIGHT = 600
     const getScale = useCallback(() => canvasSize.height / BASE_HEIGHT, [canvasSize.height])
@@ -35,8 +41,9 @@ const GameEngine = () => {
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
 
-    const toggleMute = (e: React.MouseEvent) => {
+    const toggleMute = (e: React.MouseEvent | React.TouchEvent) => {
         e.stopPropagation() // Prevent triggering jump
+        e.preventDefault()
         setIsMuted(prev => {
             if (audioRef.current) {
                 audioRef.current.muted = !prev
@@ -45,13 +52,21 @@ const GameEngine = () => {
         })
     }
 
-    // Resize handler
+    // Resize handler - reduced resolution for mobile
     useEffect(() => {
         const handleResize = () => {
             const vh = window.innerHeight
-            const aspectRatio = 400 / 600 // Original aspect ratio
-            const newHeight = vh - 40 // Leave some padding
-            const newWidth = newHeight * aspectRatio
+            const aspectRatio = 400 / 600
+            let newHeight = vh - 40
+            let newWidth = newHeight * aspectRatio
+
+            // Reduce resolution on mobile for better performance
+            if (isMobile) {
+                const scaleFactor = 0.7 // Render at 70% resolution on mobile
+                newWidth = newWidth * scaleFactor
+                newHeight = newHeight * scaleFactor
+            }
+
             setCanvasSize({ width: Math.floor(newWidth), height: Math.floor(newHeight) })
         }
         handleResize()
@@ -99,7 +114,8 @@ const GameEngine = () => {
         }
     }
 
-    const togglePause = () => {
+    const togglePause = (e?: React.MouseEvent | React.TouchEvent) => {
+        if (e) e.stopPropagation() // Prevent triggering jump
         if (gameState === 'PLAYING') {
             setGameState('PAUSED')
         } else if (gameState === 'PAUSED') {
@@ -135,7 +151,15 @@ const GameEngine = () => {
         const scaledBirdX = 50 * scale
         const scaledPipeWidth = 50 * scale
 
-        const render = () => {
+        const render = (timestamp: number = 0) => {
+            // Frame rate limiting for mobile
+            const elapsed = timestamp - lastFrameTime.current
+            if (elapsed < frameInterval) {
+                animationFrameId.current = requestAnimationFrame(render)
+                return
+            }
+            lastFrameTime.current = timestamp - (elapsed % frameInterval)
+
             // Global Animation Counter (independent of game state)
             const globalTime = Date.now() * 0.05
 
@@ -162,15 +186,17 @@ const GameEngine = () => {
             ctx.fillStyle = skyGrad
             ctx.fillRect(0, 0, W, H)
 
-            // --- DISTANT CITY HAZE (atmospheric glow - animated) ---
-            const hazeOffset = Math.sin(globalTime * 0.015) * 30 * scale
-            const hazeGrad = ctx.createRadialGradient(W / 2 + hazeOffset, HORIZON_Y + 50 * scale, 0, W / 2, HORIZON_Y + 50 * scale, W * 0.7)
-            hazeGrad.addColorStop(0, 'rgba(100, 160, 180, 0.3)')
-            hazeGrad.addColorStop(0.3, 'rgba(80, 140, 160, 0.2)')
-            hazeGrad.addColorStop(0.6, 'rgba(60, 100, 120, 0.1)')
-            hazeGrad.addColorStop(1, 'rgba(30, 40, 50, 0)')
-            ctx.fillStyle = hazeGrad
-            ctx.fillRect(0, 0, W, H)
+            // --- DISTANT CITY HAZE (skip animation on mobile) ---
+            if (!isMobile) {
+                const hazeOffset = Math.sin(globalTime * 0.015) * 30 * scale
+                const hazeGrad = ctx.createRadialGradient(W / 2 + hazeOffset, HORIZON_Y + 50 * scale, 0, W / 2, HORIZON_Y + 50 * scale, W * 0.7)
+                hazeGrad.addColorStop(0, 'rgba(100, 160, 180, 0.3)')
+                hazeGrad.addColorStop(0.3, 'rgba(80, 140, 160, 0.2)')
+                hazeGrad.addColorStop(0.6, 'rgba(60, 100, 120, 0.1)')
+                hazeGrad.addColorStop(1, 'rgba(30, 40, 50, 0)')
+                ctx.fillStyle = hazeGrad
+                ctx.fillRect(0, 0, W, H)
+            }
 
             // --- DRIFTING FOG LAYERS (multiple wispy layers) ---
             const drawFogLayer = (yBase: number, speed: number, alpha: number, fogScale: number) => {
@@ -198,9 +224,12 @@ const GameEngine = () => {
                 ctx.globalAlpha = 1
             }
 
-            drawFogLayer(HORIZON_Y - 30 * scale, 0.3, 0.15, 1.5)
-            drawFogLayer(HORIZON_Y + 20 * scale, 0.5, 0.12, 1.2)
-            drawFogLayer(HORIZON_Y + 80 * scale, 0.8, 0.08, 1.0)
+            // Skip fog layers on mobile for performance
+            if (!isMobile) {
+                drawFogLayer(HORIZON_Y - 30 * scale, 0.3, 0.15, 1.5)
+                drawFogLayer(HORIZON_Y + 20 * scale, 0.5, 0.12, 1.2)
+                drawFogLayer(HORIZON_Y + 80 * scale, 0.8, 0.08, 1.0)
+            }
 
             // === BUILDING HELPER FUNCTION ===
             type BuildingDef = { x: number, w: number, h: number, depth: number, hasSign?: boolean, signText?: string, signVertical?: boolean }
@@ -745,6 +774,7 @@ const GameEngine = () => {
             </div>
             <button
                 onClick={toggleMute}
+                onTouchEnd={toggleMute}
                 style={{
                     position: 'absolute',
                     top: 20,
@@ -766,8 +796,34 @@ const GameEngine = () => {
             >
                 {isMuted ? '🔇' : '🔊'}
             </button>
-            <div style={{ position: 'absolute', bottom: 20, color: '#666', fontSize: '14px' }}>
-                Space or Click to Jump â€¢ Collect green pill for power-up!
+            {(gameState === 'PLAYING' || gameState === 'PAUSED') && (
+                <button
+                    onClick={togglePause}
+                    onTouchEnd={togglePause}
+                    style={{
+                        position: 'absolute',
+                        top: 20,
+                        right: 74,
+                        background: gameState === 'PAUSED' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(0, 255, 255, 0.1)',
+                        border: '2px solid #00ffff',
+                        borderRadius: '50%',
+                        width: 44,
+                        height: 44,
+                        cursor: 'pointer',
+                        fontSize: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+                        transition: 'all 0.2s'
+                    }}
+                    title={gameState === 'PAUSED' ? 'Resume' : 'Pause'}
+                >
+                    {gameState === 'PAUSED' ? '▶️' : '⏸️'}
+                </button>
+            )}
+            <div style={{ position: 'absolute', bottom: 20, color: '#666', fontSize: '14px', textAlign: 'center' }}>
+                Tap or Space to Jump • Collect green pill for power-up!
             </div>
             <audio
                 ref={audioRef}
