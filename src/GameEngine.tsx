@@ -40,7 +40,7 @@ const GameEngine = () => {
 
     // Tower/Obstacle sprites - separate arrays for top and bottom
     const TOP_TOWER_PATHS = ['/tower1.png', '/tower4.png', '/tower5.png', '/tower6.png']
-    const BOTTOM_TOWER_PATHS = ['/tower2.png', '/tower3.png', '/tower7.png', '/tower8.png']
+    const BOTTOM_TOWER_PATHS = ['/tower2.png', '/tower7.png', '/tower8.png']
     const topTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(TOP_TOWER_PATHS.length).fill(null))
     const bottomTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(BOTTOM_TOWER_PATHS.length).fill(null))
 
