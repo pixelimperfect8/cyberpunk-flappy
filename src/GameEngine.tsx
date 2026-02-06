@@ -25,12 +25,21 @@ const GameEngine = () => {
     const frameCount = useRef(0)
     const animationFrameId = useRef<number>(0)
 
-    // Power-up system
+    // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
     const powerUpEndTime = useRef(0)
     const pill = useRef<{ x: number, y: number, rotation: number } | null>(null)
     const pillSpawnTimer = useRef(0)
     const projectiles = useRef<{ x: number, y: number }[]>([])
+
+    // Blue pill system (debuff - makes bird bigger, game faster)
+    const bluePillActive = useRef(false)
+    const bluePillEndTime = useRef(0)
+    const bluePill = useRef<{ x: number, y: number, rotation: number } | null>(null)
+    const bluePillSpawnTimer = useRef(0)
+    const BLUE_PILL_DURATION = 5000 // 5 seconds
+    const BLUE_PILL_SIZE_MULT = 1.5 // 50% bigger
+    const BLUE_PILL_SPEED_MULT = 1.4 // 40% faster
 
     // Acid rain system
     const gameStartTime = useRef(0)
@@ -76,6 +85,11 @@ const GameEngine = () => {
         pill.current = null
         pillSpawnTimer.current = 0
         projectiles.current = []
+        // Reset blue pill
+        bluePillActive.current = false
+        bluePillEndTime.current = 0
+        bluePill.current = null
+        bluePillSpawnTimer.current = 0
         // Reset acid rain
         rainDrops.current = []
         splashParticles.current = []
@@ -140,9 +154,12 @@ const GameEngine = () => {
 
         const scale = getScale()
         const scaledGravity = GRAVITY * scale
-        const scaledPipeSpeed = PIPE_SPEED * scale
+        // Dynamic values based on blue pill status
+        const bluePillMult = bluePillActive.current ? BLUE_PILL_SPEED_MULT : 1
+        const scaledPipeSpeed = PIPE_SPEED * scale * bluePillMult
         const scaledPipeGap = PIPE_GAP * scale
-        const scaledBirdSize = 30 * scale
+        const birdSizeMult = bluePillActive.current ? BLUE_PILL_SIZE_MULT : 1
+        const scaledBirdSize = 30 * scale * birdSizeMult
         const scaledBirdX = 50 * scale
         const scaledPipeWidth = 50 * scale
 
@@ -482,7 +499,12 @@ const GameEngine = () => {
             ctx.globalAlpha = 1
 
             // Draw Bird
-            if (powerUpActive.current) {
+            if (bluePillActive.current) {
+                // Blue pill debuff - bird turns blue/purple and grows
+                ctx.shadowColor = '#0088ff'
+                ctx.shadowBlur = 15 * scale
+                ctx.fillStyle = '#8888ff'
+            } else if (powerUpActive.current) {
                 ctx.shadowColor = '#00ff00'
                 ctx.shadowBlur = 15 * scale
                 ctx.fillStyle = '#88ff88'
@@ -572,6 +594,74 @@ const GameEngine = () => {
                     if (pill.current && pill.current.x < -50 * scale) {
                         pill.current = null
                     }
+                }
+
+                // === BLUE PILL (DEBUFF) ===
+                bluePillSpawnTimer.current++
+                if (!bluePill.current && bluePillSpawnTimer.current > 800 && Math.random() < 0.008 && pipes.current.length > 0) {
+                    const lastPipe = pipes.current[pipes.current.length - 1]
+                    const gapCenter = lastPipe.topHeight + scaledPipeGap / 2
+                    bluePill.current = { x: canvas.width + 40 * scale, y: gapCenter + 20 * scale, rotation: 0 }
+                    bluePillSpawnTimer.current = 0
+                }
+
+                if (bluePill.current) {
+                    bluePill.current.x -= scaledPipeSpeed * 0.8
+                    bluePill.current.rotation += 0.12
+                    bluePill.current.y += Math.sin(globalTime * 0.12) * 0.6 * scale
+
+                    const bpx = bluePill.current.x
+                    const bpy = bluePill.current.y
+                    const bpRot = bluePill.current.rotation
+                    const bpRadius = 18 * scale
+                    const bpWidth = Math.abs(Math.cos(bpRot)) * bpRadius + 4 * scale
+                    const bpHeight = bpRadius
+
+                    // Shadow
+                    ctx.fillStyle = 'rgba(0, 0, 80, 0.4)'
+                    ctx.beginPath()
+                    ctx.ellipse(bpx + 4 * scale, bpy + bpRadius + 8 * scale, bpWidth * 0.7, 5 * scale, 0, 0, Math.PI * 2)
+                    ctx.fill()
+
+                    // Blue pill gradient
+                    const bpGrad = ctx.createLinearGradient(bpx - bpWidth, bpy, bpx + bpWidth, bpy)
+                    bpGrad.addColorStop(0, '#1a1a6b')
+                    bpGrad.addColorStop(0.3, '#3333cc')
+                    bpGrad.addColorStop(0.5, '#5555ee')
+                    bpGrad.addColorStop(0.7, '#3333cc')
+                    bpGrad.addColorStop(1, '#1a1a6b')
+
+                    ctx.fillStyle = bpGrad
+                    ctx.beginPath()
+                    ctx.ellipse(bpx, bpy, bpWidth, bpHeight, 0, 0, Math.PI * 2)
+                    ctx.fill()
+
+                    // Blue glow
+                    ctx.shadowColor = '#0088ff'
+                    ctx.shadowBlur = 15 * scale
+                    ctx.strokeStyle = '#4488ff'
+                    ctx.lineWidth = 2 * scale
+                    ctx.beginPath()
+                    ctx.ellipse(bpx, bpy, bpWidth + 4 * scale, bpHeight + 4 * scale, 0, 0, Math.PI * 2)
+                    ctx.stroke()
+                    ctx.shadowBlur = 0
+
+                    // Collision detection
+                    if (scaledBirdX < bpx + bpWidth && scaledBirdX + scaledBirdSize > bpx - bpWidth &&
+                        birdY.current < bpy + bpHeight && birdY.current + scaledBirdSize > bpy - bpHeight) {
+                        bluePillActive.current = true
+                        bluePillEndTime.current = Date.now() + BLUE_PILL_DURATION
+                        bluePill.current = null
+                    }
+
+                    if (bluePill.current && bluePill.current.x < -50 * scale) {
+                        bluePill.current = null
+                    }
+                }
+
+                // Check blue pill expiry
+                if (bluePillActive.current && Date.now() > bluePillEndTime.current) {
+                    bluePillActive.current = false
                 }
 
                 // === PROJECTILES ===
