@@ -105,10 +105,15 @@ const GameEngine = () => {
         }
         // Load villain sprite
         const villainImg = new Image()
-        villainImg.src = '/villain.jpg'
+        villainImg.crossOrigin = 'anonymous'
         villainImg.onload = () => {
+            console.log('Villain loaded successfully')
             villainSprite.current = villainImg
         }
+        villainImg.onerror = (e) => {
+            console.error('Failed to load villain:', e)
+        }
+        villainImg.src = '/villain.jpg'
     }, [])
 
     const resetGame = () => {
