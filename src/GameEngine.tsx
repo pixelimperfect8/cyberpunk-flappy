@@ -529,8 +529,8 @@ const GameEngine = () => {
             const TOP_RAIL_Y = GROUND_Y - 180 * scale // Top teal bridge position
             if (gameState === 'PLAYING') {
                 railcartSpawnTimer.current++
-                // Random spawn every ~3-6 seconds (180-360 frames at 60fps)
-                if (!railcart.current && railcartSpawnTimer.current > 180 && Math.random() < 0.02) {
+                // Random spawn every ~10-15 seconds (600+ frames at 60fps)
+                if (!railcart.current && railcartSpawnTimer.current > 600 && Math.random() < 0.008) {
                     railcart.current = { x: -150, speed: 4 + Math.random() * 3 }
                     railcartSpawnTimer.current = 0
                 }
