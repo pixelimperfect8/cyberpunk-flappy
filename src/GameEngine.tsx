@@ -3,7 +3,7 @@
 const GameEngine = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
-    const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'GAME_OVER'>('START')
+    const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'PAUSED' | 'GAME_OVER'>('START')
     const [score, setScore] = useState(0)
     const [canvasSize, setCanvasSize] = useState({ width: 400, height: 600 })
     const [isMuted, setIsMuted] = useState(false)
@@ -94,6 +94,16 @@ const GameEngine = () => {
             }
         } else if (gameState === 'START' || gameState === 'GAME_OVER') {
             startGame()
+        } else if (gameState === 'PAUSED') {
+            setGameState('PLAYING')
+        }
+    }
+
+    const togglePause = () => {
+        if (gameState === 'PLAYING') {
+            setGameState('PAUSED')
+        } else if (gameState === 'PAUSED') {
+            setGameState('PLAYING')
         }
     }
 
@@ -102,6 +112,9 @@ const GameEngine = () => {
             if (e.code === 'Space' || e.code === 'ArrowUp') {
                 e.preventDefault()
                 jump()
+            } else if (e.code === 'Escape' || e.code === 'Enter') {
+                e.preventDefault()
+                togglePause()
             }
         }
         window.addEventListener('keydown', handleKeyDown)
@@ -652,6 +665,30 @@ const GameEngine = () => {
                 ctx.fillText('Click to Start', canvas.width / 2 - 80 * scale, canvas.height / 2)
                 ctx.font = `${20 * scale}px Arial`
                 ctx.fillText('or Press Space', canvas.width / 2 - 60 * scale, canvas.height / 2 + 30 * scale)
+            } else if (gameState === 'PAUSED') {
+                // Draw pipes in background
+                pipes.current.forEach(p => {
+                    if (!p.destroyed) {
+                        ctx.fillStyle = '#73bf2e'
+                        ctx.fillRect(p.x, 0, scaledPipeWidth, p.topHeight)
+                        ctx.fillRect(p.x, p.topHeight + scaledPipeGap, scaledPipeWidth, canvas.height - (p.topHeight + scaledPipeGap) - 20 * scale)
+                    }
+                })
+
+                // Pause overlay
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+                ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+                ctx.fillStyle = '#00ffff'
+                ctx.shadowColor = '#00ffff'
+                ctx.shadowBlur = 15 * scale
+                ctx.font = `bold ${36 * scale}px Arial`
+                ctx.fillText('PAUSED', canvas.width / 2 - 70 * scale, canvas.height / 2)
+                ctx.shadowBlur = 0
+
+                ctx.fillStyle = 'white'
+                ctx.font = `${18 * scale}px Arial`
+                ctx.fillText('Press ESC or ENTER to resume', canvas.width / 2 - 110 * scale, canvas.height / 2 + 40 * scale)
             } else if (gameState === 'GAME_OVER') {
                 pipes.current.forEach(p => {
                     ctx.fillStyle = '#73bf2e'
