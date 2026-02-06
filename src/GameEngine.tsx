@@ -48,7 +48,6 @@ const GameEngine = () => {
     const railcartSprite = useRef<HTMLImageElement | null>(null)
     const railcart = useRef<{ x: number, speed: number } | null>(null)
     const railcartSpawnTimer = useRef(0)
-    const RAIL_Y_PERCENT = 0.35 // Rail position (35% from top)
 
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
