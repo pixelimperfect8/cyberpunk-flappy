@@ -525,28 +525,7 @@ const GameEngine = () => {
             drawFlyingCar((globalTime * 1 + 150) % (W + 60 * scale) - 30 * scale, 200 * scale, 1, 1.2)
             drawFlyingCar(W - (globalTime * 0.8 + 80) % (W + 60 * scale), 260 * scale, -1, 0.7)
 
-            // === RAIL TRACK ===
-            const RAIL_Y = H * RAIL_Y_PERCENT
-            // Draw rail supports
-            ctx.fillStyle = '#1a1a25'
-            for (let rx = 0; rx < W; rx += 80 * scale) {
-                ctx.fillRect(rx, RAIL_Y, 4 * scale, GROUND_Y - RAIL_Y)
-            }
-            // Draw rail track
-            ctx.fillStyle = '#3a3a45'
-            ctx.fillRect(0, RAIL_Y - 4 * scale, W, 8 * scale)
-            ctx.strokeStyle = '#5a5a65'
-            ctx.lineWidth = 2 * scale
-            ctx.beginPath()
-            ctx.moveTo(0, RAIL_Y - 4 * scale)
-            ctx.lineTo(W, RAIL_Y - 4 * scale)
-            ctx.stroke()
-            ctx.beginPath()
-            ctx.moveTo(0, RAIL_Y + 4 * scale)
-            ctx.lineTo(W, RAIL_Y + 4 * scale)
-            ctx.stroke()
-
-            // === RAILCART ANIMATION ===
+            // === RAILCART ANIMATION (runs on teal ground line) ===
             if (gameState === 'PLAYING') {
                 railcartSpawnTimer.current++
                 // Random spawn every ~5-10 seconds (300-600 frames at 60fps)
@@ -560,7 +539,17 @@ const GameEngine = () => {
                 railcart.current.x += railcart.current.speed
                 const cartW = 80 * scale
                 const cartH = cartW * (railcartSprite.current.height / railcartSprite.current.width)
-                ctx.drawImage(railcartSprite.current, railcart.current.x, RAIL_Y - cartH + 4 * scale, cartW, cartH)
+                const cartY = GROUND_Y - cartH
+
+                // Teal glow underneath the railcart
+                ctx.shadowColor = '#00ffff'
+                ctx.shadowBlur = 20 * scale
+                ctx.fillStyle = '#00ffff'
+                ctx.fillRect(railcart.current.x + 5 * scale, GROUND_Y - 3 * scale, cartW - 10 * scale, 6 * scale)
+                ctx.shadowBlur = 0
+
+                // Draw the railcart
+                ctx.drawImage(railcartSprite.current, railcart.current.x, cartY, cartW, cartH)
 
                 // Remove when off screen
                 if (railcart.current.x > W + 100 * scale) {
