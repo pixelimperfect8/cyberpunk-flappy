@@ -27,6 +27,10 @@ const GameEngine = () => {
     const animationFrameId = useRef<number>(0)
     const dickySprite = useRef<HTMLImageElement | null>(null)
     const dickyBigSprite = useRef<HTMLImageElement | null>(null) // Blue pill transformation sprite
+    const dickyAlt1 = useRef<HTMLImageElement | null>(null) // Alternate sprite 1
+    const dickyAlt2 = useRef<HTMLImageElement | null>(null) // Alternate sprite 2
+    const currentAltSprite = useRef<number>(0) // 0 = normal, 1 = alt1, 2 = alt2
+    const altSpriteSwapTimer = useRef<number>(0) // Timer for next swap check
 
     // Parallax skyline backgrounds
     const skylineBack = useRef<HTMLImageElement | null>(null)
@@ -170,6 +174,13 @@ const GameEngine = () => {
             console.log('Big Dicky sprite loaded')
             dickyBigSprite.current = bigImg
         }
+        // Load alternate sprites for random swapping
+        const alt1Img = new Image()
+        alt1Img.src = '/dicky_alt1.png'
+        alt1Img.onload = () => { dickyAlt1.current = alt1Img }
+        const alt2Img = new Image()
+        alt2Img.src = '/dicky_alt2.png'
+        alt2Img.onload = () => { dickyAlt2.current = alt2Img }
         // Load all villain sprites
         VILLAIN_PATHS.forEach((path, index) => {
             const villainImg = new Image()
@@ -610,21 +621,45 @@ const GameEngine = () => {
                 const spriteW = scaledBirdSize * 3.5  // Even bigger for transformation
                 const spriteH = scaledBirdSize * 2.5
                 ctx.drawImage(dickyBigSprite.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
-            } else if (dickySprite.current) {
-                // Normal sprite
-                const spriteW = scaledBirdSize * 2.5  // Wider for the horizontal sprite
-                const spriteH = scaledBirdSize * 1.5
-                ctx.drawImage(dickySprite.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
             } else {
-                // Fallback colored square
-                if (bluePillActive.current) {
-                    ctx.fillStyle = '#8888ff'
-                } else if (powerUpActive.current) {
-                    ctx.fillStyle = '#88ff88'
-                } else {
-                    ctx.fillStyle = '#fdb'
+                // Random sprite swap logic (only when not blue pill)
+                altSpriteSwapTimer.current++
+                if (altSpriteSwapTimer.current > 600) { // Check every ~10 seconds
+                    altSpriteSwapTimer.current = 0
+                    if (Math.random() < 0.1) { // 10% chance to swap
+                        // Pick a random alt sprite (1 or 2), or go back to normal (0)
+                        currentAltSprite.current = Math.floor(Math.random() * 3)
+                    }
                 }
-                ctx.fillRect(-scaledBirdSize / 2, -scaledBirdSize / 2, scaledBirdSize, scaledBirdSize)
+                // Also revert to normal after ~5 seconds of alt sprite
+                if (currentAltSprite.current !== 0 && altSpriteSwapTimer.current > 300) {
+                    currentAltSprite.current = 0
+                }
+
+                // Select sprite based on current alt state
+                let activeSprite = dickySprite.current
+                if (currentAltSprite.current === 1 && dickyAlt1.current) {
+                    activeSprite = dickyAlt1.current
+                } else if (currentAltSprite.current === 2 && dickyAlt2.current) {
+                    activeSprite = dickyAlt2.current
+                }
+
+                if (activeSprite) {
+                    // Normal sprite
+                    const spriteW = scaledBirdSize * 2.5  // Wider for the horizontal sprite
+                    const spriteH = scaledBirdSize * 1.5
+                    ctx.drawImage(activeSprite, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
+                } else {
+                    // Fallback colored square
+                    if (bluePillActive.current) {
+                        ctx.fillStyle = '#8888ff'
+                    } else if (powerUpActive.current) {
+                        ctx.fillStyle = '#88ff88'
+                    } else {
+                        ctx.fillStyle = '#fdb'
+                    }
+                    ctx.fillRect(-scaledBirdSize / 2, -scaledBirdSize / 2, scaledBirdSize, scaledBirdSize)
+                }
             }
 
             ctx.restore()
