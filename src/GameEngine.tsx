@@ -21,9 +21,11 @@ const GameEngine = () => {
     // Refs for game loop state (to avoid closure staleness)
     const birdY = useRef(300)
     const birdVelocity = useRef(0)
+    const birdRotation = useRef(0) // For rotation animation
     const pipes = useRef<{ x: number, topHeight: number, passed: boolean, destroyed?: boolean }[]>([])
     const frameCount = useRef(0)
     const animationFrameId = useRef<number>(0)
+    const dickySprite = useRef<HTMLImageElement | null>(null)
 
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
@@ -74,10 +76,20 @@ const GameEngine = () => {
         return () => window.removeEventListener('resize', handleResize)
     }, [])
 
+    // Load the Dicky sprite
+    useEffect(() => {
+        const img = new Image()
+        img.src = '/dicky.png'
+        img.onload = () => {
+            dickySprite.current = img
+        }
+    }, [])
+
     const resetGame = () => {
         const scale = getScale()
         birdY.current = 300 * scale
         birdVelocity.current = 0
+        birdRotation.current = 0
         pipes.current = []
         frameCount.current = 0
         powerUpActive.current = false
@@ -498,20 +510,54 @@ const GameEngine = () => {
 
             ctx.globalAlpha = 1
 
-            // Draw Bird
+            // Draw Bird (Flappy Dicky sprite with rotation)
+            ctx.save()
+
+            // Calculate center of bird for rotation
+            const birdCenterX = scaledBirdX + scaledBirdSize / 2
+            const birdCenterY = birdY.current + scaledBirdSize / 2
+
+            // Update rotation based on velocity when power-up is active
+            if (powerUpActive.current) {
+                // Spin forward as it falls/jumps
+                birdRotation.current += 0.15
+            } else {
+                // Normal mode: slight tilt based on velocity
+                const targetRotation = birdVelocity.current * 0.05
+                birdRotation.current = birdRotation.current * 0.9 + targetRotation * 0.1
+            }
+
+            ctx.translate(birdCenterX, birdCenterY)
+            ctx.rotate(birdRotation.current)
+
+            // Apply glow effects
             if (bluePillActive.current) {
-                // Blue pill debuff - bird turns blue/purple and grows
                 ctx.shadowColor = '#0088ff'
-                ctx.shadowBlur = 15 * scale
-                ctx.fillStyle = '#8888ff'
+                ctx.shadowBlur = 20 * scale
             } else if (powerUpActive.current) {
                 ctx.shadowColor = '#00ff00'
-                ctx.shadowBlur = 15 * scale
-                ctx.fillStyle = '#88ff88'
-            } else {
-                ctx.fillStyle = '#fdb'
+                ctx.shadowBlur = 20 * scale
             }
-            ctx.fillRect(scaledBirdX, birdY.current, scaledBirdSize, scaledBirdSize)
+
+            // Draw the sprite or fallback to colored square
+            if (dickySprite.current) {
+                // Draw sprite centered, with aspect ratio preserved
+                const spriteW = scaledBirdSize * 2.5  // Wider for the horizontal sprite
+                const spriteH = scaledBirdSize * 1.5
+                ctx.drawImage(dickySprite.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
+            } else {
+                // Fallback colored square
+                if (bluePillActive.current) {
+                    ctx.fillStyle = '#8888ff'
+                } else if (powerUpActive.current) {
+                    ctx.fillStyle = '#88ff88'
+                } else {
+                    ctx.fillStyle = '#fdb'
+                }
+                ctx.fillRect(-scaledBirdSize / 2, -scaledBirdSize / 2, scaledBirdSize, scaledBirdSize)
+            }
+
+            ctx.restore()
             ctx.shadowBlur = 0
 
             if (gameState === 'PLAYING') {
