@@ -528,9 +528,9 @@ const GameEngine = () => {
             // === RAILCART ANIMATION (runs on teal ground line) ===
             if (gameState === 'PLAYING') {
                 railcartSpawnTimer.current++
-                // Random spawn every ~5-10 seconds (300-600 frames at 60fps)
-                if (!railcart.current && railcartSpawnTimer.current > 300 && Math.random() < 0.005) {
-                    railcart.current = { x: -100 * scale, speed: (15 + Math.random() * 10) * scale }
+                // Random spawn every ~3-6 seconds (180-360 frames at 60fps)
+                if (!railcart.current && railcartSpawnTimer.current > 180 && Math.random() < 0.02) {
+                    railcart.current = { x: -150, speed: 18 + Math.random() * 12 }
                     railcartSpawnTimer.current = 0
                 }
             }
