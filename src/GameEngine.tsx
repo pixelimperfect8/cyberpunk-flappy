@@ -28,6 +28,12 @@ const GameEngine = () => {
     const dickySprite = useRef<HTMLImageElement | null>(null)
     const dickyBigSprite = useRef<HTMLImageElement | null>(null) // Blue pill transformation sprite
 
+    // Parallax skyline backgrounds
+    const skylineBack = useRef<HTMLImageElement | null>(null)
+    const skylineFront = useRef<HTMLImageElement | null>(null)
+    const skylineBackX = useRef(0)
+    const skylineFrontX = useRef(0)
+
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
     const powerUpEndTime = useRef(0)
@@ -177,6 +183,13 @@ const GameEngine = () => {
             }
             villainImg.src = path
         })
+        // Load parallax skyline backgrounds
+        const skyBack = new Image()
+        skyBack.src = '/skyline_back.png'
+        skyBack.onload = () => skylineBack.current = skyBack
+        const skyFront = new Image()
+        skyFront.src = '/skyline_front.png'
+        skyFront.onload = () => skylineFront.current = skyFront
     }, [])
 
     const resetGame = () => {
@@ -289,16 +302,74 @@ const GameEngine = () => {
                 return x - Math.floor(x)
             }
 
-            // --- SKY GRADIENT (Animated - subtle color shift) ---
+            // --- SKY GRADIENT (Animated - dynamic color shift) ---
             const timeShift = Math.sin(globalTime * 0.01) * 0.1
             const skyGrad = ctx.createLinearGradient(0, 0, 0, HORIZON_Y + 150 * scale)
             skyGrad.addColorStop(0, '#0d0d1a')
-            skyGrad.addColorStop(0.15, `hsl(240, 30%, ${8 + timeShift * 3}%)`)
-            skyGrad.addColorStop(0.4, `hsl(210, 25%, ${18 + timeShift * 5}%)`)
-            skyGrad.addColorStop(0.7, `hsl(200, 20%, ${28 + timeShift * 4}%)`)
-            skyGrad.addColorStop(1, `hsl(190, 15%, ${35 + timeShift * 3}%)`)
+            skyGrad.addColorStop(0.15, `hsl(${240 + Math.sin(globalTime * 0.008) * 10}, 30%, ${8 + timeShift * 3}%)`)
+            skyGrad.addColorStop(0.4, `hsl(${210 + Math.sin(globalTime * 0.006) * 15}, 25%, ${18 + timeShift * 5}%)`)
+            skyGrad.addColorStop(0.7, `hsl(${200 + Math.sin(globalTime * 0.004) * 20}, 20%, ${28 + timeShift * 4}%)`)
+            skyGrad.addColorStop(1, `hsl(${190 + Math.sin(globalTime * 0.003) * 25}, 15%, ${35 + timeShift * 3}%)`)
             ctx.fillStyle = skyGrad
             ctx.fillRect(0, 0, W, H)
+
+            // --- PULSING NEON HORIZON GLOW ---
+            const neonPulse1 = (Math.sin(globalTime * 0.04) + 1) / 2 // 0-1 pulse
+            const neonPulse2 = (Math.sin(globalTime * 0.03 + 1) + 1) / 2
+            const neonPulse3 = (Math.sin(globalTime * 0.025 + 2) + 1) / 2
+
+            // Magenta glow
+            const magentaGlow = ctx.createRadialGradient(
+                W * 0.3, HORIZON_Y + 30 * scale, 0,
+                W * 0.3, HORIZON_Y + 30 * scale, 200 * scale
+            )
+            magentaGlow.addColorStop(0, `rgba(255, 0, 150, ${0.15 + neonPulse1 * 0.15})`)
+            magentaGlow.addColorStop(0.5, `rgba(255, 0, 100, ${0.08 + neonPulse1 * 0.08})`)
+            magentaGlow.addColorStop(1, 'rgba(255, 0, 80, 0)')
+            ctx.fillStyle = magentaGlow
+            ctx.fillRect(0, 0, W, H)
+
+            // Cyan glow
+            const cyanGlow = ctx.createRadialGradient(
+                W * 0.7, HORIZON_Y + 20 * scale, 0,
+                W * 0.7, HORIZON_Y + 20 * scale, 180 * scale
+            )
+            cyanGlow.addColorStop(0, `rgba(0, 255, 255, ${0.12 + neonPulse2 * 0.12})`)
+            cyanGlow.addColorStop(0.5, `rgba(0, 200, 255, ${0.06 + neonPulse2 * 0.06})`)
+            cyanGlow.addColorStop(1, 'rgba(0, 150, 255, 0)')
+            ctx.fillStyle = cyanGlow
+            ctx.fillRect(0, 0, W, H)
+
+            // Purple center glow
+            const purpleGlow = ctx.createRadialGradient(
+                W * 0.5, HORIZON_Y, 0,
+                W * 0.5, HORIZON_Y, 250 * scale
+            )
+            purpleGlow.addColorStop(0, `rgba(150, 50, 255, ${0.1 + neonPulse3 * 0.1})`)
+            purpleGlow.addColorStop(0.6, `rgba(100, 0, 200, ${0.05 + neonPulse3 * 0.05})`)
+            purpleGlow.addColorStop(1, 'rgba(50, 0, 100, 0)')
+            ctx.fillStyle = purpleGlow
+            ctx.fillRect(0, 0, W, H)
+
+            // --- SWEEPING LIGHT BEAMS ---
+            ctx.globalAlpha = 0.03
+            for (let beam = 0; beam < 3; beam++) {
+                const beamAngle = (globalTime * 0.02 + beam * 2) % (Math.PI * 2)
+                const beamX = W * 0.5 + Math.cos(beamAngle) * W * 0.4
+                const beamGrad = ctx.createLinearGradient(beamX, 0, beamX + 100 * scale, HORIZON_Y)
+                beamGrad.addColorStop(0, 'rgba(255, 255, 255, 0)')
+                beamGrad.addColorStop(0.5, `rgba(${beam === 0 ? '255,100,255' : beam === 1 ? '100,255,255' : '255,255,100'}, 1)`)
+                beamGrad.addColorStop(1, 'rgba(255, 255, 255, 0)')
+                ctx.fillStyle = beamGrad
+                ctx.beginPath()
+                ctx.moveTo(beamX - 30 * scale, 0)
+                ctx.lineTo(beamX + 30 * scale, 0)
+                ctx.lineTo(beamX + 80 * scale, HORIZON_Y)
+                ctx.lineTo(beamX - 80 * scale, HORIZON_Y)
+                ctx.closePath()
+                ctx.fill()
+            }
+            ctx.globalAlpha = 1
 
             // --- DISTANT CITY HAZE (atmospheric glow - animated) ---
             const hazeOffset = Math.sin(globalTime * 0.015) * 30 * scale
@@ -340,250 +411,35 @@ const GameEngine = () => {
             drawFogLayer(HORIZON_Y + 20 * scale, 0.5, 0.12, 1.2)
             drawFogLayer(HORIZON_Y + 80 * scale, 0.8, 0.08, 1.0)
 
-            // === DETAILED CYBERPUNK BUILDING HELPER FUNCTION ===
-            type BuildingDef = { x: number, w: number, h: number, depth: number, hasSign?: boolean, signText?: string, signVertical?: boolean }
 
-            const drawBuilding3D = (b: BuildingDef) => {
-                const bx = b.x * scale
-                const bw = b.w * scale
-                const bh = b.h * scale
-                const y = GROUND_Y - bh
-                const seed = b.x * 123.456
 
-                // Base building - grungy metal panels
-                const baseR = Math.floor(25 + b.depth * 8)
-                const baseG = Math.floor(30 + b.depth * 7)
-                const baseB = Math.floor(35 + b.depth * 6)
+            // === PARALLAX SKYLINE BACKGROUNDS ===
+            const skyScrollSpeed = scaledPipeSpeed * 0.3
 
-                // Draw main building with gradient
-                const buildGrad = ctx.createLinearGradient(bx, y, bx + bw, y)
-                buildGrad.addColorStop(0, `rgb(${baseR - 10}, ${baseG - 10}, ${baseB - 5})`)
-                buildGrad.addColorStop(0.5, `rgb(${baseR}, ${baseG}, ${baseB})`)
-                buildGrad.addColorStop(1, `rgb(${baseR - 15}, ${baseG - 12}, ${baseB - 8})`)
-                ctx.fillStyle = buildGrad
-                ctx.fillRect(bx, y, bw, bh)
-
-                // Rust spots / weathering
-                for (let i = 0; i < 8; i++) {
-                    const rx = bx + seededRand(seed + i) * bw * 0.8
-                    const ry = y + seededRand(seed + i * 2) * bh * 0.9
-                    const rSize = (3 + seededRand(seed + i * 3) * 5) * scale
-                    ctx.fillStyle = `rgba(${80 + seededRand(seed + i) * 40}, ${40 + seededRand(seed + i) * 20}, ${20}, 0.4)`
-                    ctx.beginPath()
-                    ctx.arc(rx, ry, rSize, 0, Math.PI * 2)
-                    ctx.fill()
-                }
-
-                // Metal panel lines (horizontal)
-                ctx.strokeStyle = `rgba(0, 0, 0, 0.3)`
-                ctx.lineWidth = 1 * scale
-                for (let py = y + 15 * scale; py < GROUND_Y; py += 25 * scale) {
-                    if (seededRand(py * 0.1 + seed) > 0.4) {
-                        ctx.beginPath()
-                        ctx.moveTo(bx + 2 * scale, py)
-                        ctx.lineTo(bx + bw - 2 * scale, py)
-                        ctx.stroke()
-                    }
-                }
-
-                // Exposed pipes on sides
-                if (seededRand(seed * 1.1) > 0.5) {
-                    const pipeX = bx + (seededRand(seed) > 0.5 ? bw - 4 * scale : 2 * scale)
-                    ctx.fillStyle = '#444'
-                    ctx.fillRect(pipeX, y + 20 * scale, 4 * scale, bh - 40 * scale)
-                    ctx.fillStyle = '#555'
-                    ctx.fillRect(pipeX + 1 * scale, y + 20 * scale, 2 * scale, bh - 40 * scale)
-                    // Pipe joints
-                    for (let jy = y + 40 * scale; jy < GROUND_Y - 30 * scale; jy += 35 * scale) {
-                        ctx.fillStyle = '#333'
-                        ctx.fillRect(pipeX - 1 * scale, jy, 6 * scale, 4 * scale)
-                    }
-                }
-
-                // AC Units
-                if (bw > 40 * scale && seededRand(seed * 1.2) > 0.4) {
-                    const numAC = Math.floor(seededRand(seed * 1.3) * 3) + 1
-                    for (let a = 0; a < numAC; a++) {
-                        const acX = bx + 8 * scale + seededRand(seed + a) * (bw - 30 * scale)
-                        const acY = y + 30 * scale + seededRand(seed + a * 2) * (bh * 0.4)
-                        const acW = 12 * scale
-                        const acH = 8 * scale
-                        // AC body
-                        ctx.fillStyle = '#555'
-                        ctx.fillRect(acX, acY, acW, acH)
-                        ctx.fillStyle = '#444'
-                        ctx.fillRect(acX + 1 * scale, acY + 1 * scale, acW - 2 * scale, acH - 2 * scale)
-                        // Vent lines
-                        ctx.strokeStyle = '#333'
-                        ctx.lineWidth = 0.5 * scale
-                        for (let vl = 0; vl < 4; vl++) {
-                            ctx.beginPath()
-                            ctx.moveTo(acX + 2 * scale, acY + 2 * scale + vl * 1.5 * scale)
-                            ctx.lineTo(acX + acW - 2 * scale, acY + 2 * scale + vl * 1.5 * scale)
-                            ctx.stroke()
-                        }
-                    }
-                }
-
-                // Cable clusters
-                if (seededRand(seed * 1.4) > 0.6) {
-                    const cableX = bx + seededRand(seed * 1.5) * bw * 0.6
-                    ctx.strokeStyle = '#222'
-                    ctx.lineWidth = 1.5 * scale
-                    for (let c = 0; c < 3; c++) {
-                        ctx.beginPath()
-                        ctx.moveTo(cableX + c * 2 * scale, y)
-                        ctx.quadraticCurveTo(
-                            cableX + c * 2 * scale + 15 * scale,
-                            y + 40 * scale,
-                            cableX + c * 2 * scale + 5 * scale,
-                            y + 80 * scale
-                        )
-                        ctx.stroke()
-                    }
-                }
-
-                // Windows with varied light patterns
-                const winColors = ['#00ffff', '#ff00ff', '#ffaa00', '#00ff88', '#ff6644', '#ffffff', '#4488ff']
-                const winW = 3 * scale, winH = 4 * scale
-                for (let wy = y + 12 * scale; wy < GROUND_Y - 12 * scale; wy += 8 * scale) {
-                    for (let wx = bx + 5 * scale; wx < bx + bw - 5 * scale; wx += 7 * scale) {
-                        const winRand = seededRand(wx * wy * 0.001 + b.x)
-                        if (winRand > 0.25) {
-                            const colorIdx = Math.floor(seededRand(wx + wy) * winColors.length)
-                            const brightness = 0.4 + seededRand(wx * wy) * 0.6
-                            ctx.fillStyle = winColors[colorIdx]
-                            ctx.globalAlpha = brightness
-                            ctx.fillRect(wx, wy, winW, winH)
-                            // Window frame
-                            ctx.strokeStyle = 'rgba(0,0,0,0.5)'
-                            ctx.lineWidth = 0.5 * scale
-                            ctx.strokeRect(wx, wy, winW, winH)
-                        }
-                    }
-                }
+            // Draw back skyline (slower, distant)
+            if (skylineBack.current) {
+                skylineBackX.current -= skyScrollSpeed * 0.3
+                const backImg = skylineBack.current
+                const backH = GROUND_Y - HORIZON_Y + 50 * scale
+                const backW = backImg.width * (backH / backImg.height)
+                if (skylineBackX.current <= -backW) skylineBackX.current = 0
+                ctx.globalAlpha = 0.7
+                ctx.drawImage(backImg, skylineBackX.current, HORIZON_Y - 50 * scale, backW, backH)
+                ctx.drawImage(backImg, skylineBackX.current + backW, HORIZON_Y - 50 * scale, backW, backH)
                 ctx.globalAlpha = 1
-
-                // Satellite dish (on taller buildings)
-                if (bh > 180 * scale && seededRand(seed * 1.6) > 0.5) {
-                    const dishX = bx + bw * 0.7
-                    const dishY = y + 10 * scale
-                    const dishSize = 10 * scale
-                    ctx.fillStyle = '#666'
-                    ctx.beginPath()
-                    ctx.ellipse(dishX, dishY, dishSize, dishSize * 0.4, -0.3, 0, Math.PI)
-                    ctx.fill()
-                    ctx.fillStyle = '#444'
-                    ctx.fillRect(dishX - 1 * scale, dishY, 2 * scale, 15 * scale)
-                }
-
-                // Rooftop antenna with blinking light
-                if (bh > 150 * scale && seededRand(seed * 1.7) > 0.4) {
-                    const antX = bx + bw * 0.3 + seededRand(seed * 1.8) * bw * 0.4
-                    ctx.fillStyle = '#333'
-                    ctx.fillRect(antX - 1 * scale, y - 25 * scale, 2 * scale, 25 * scale)
-                    // Blinking light
-                    const blink = Math.sin(globalTime * 0.1 + seed) > 0
-                    ctx.fillStyle = blink ? '#ff0000' : '#440000'
-                    ctx.shadowColor = blink ? '#ff0000' : 'transparent'
-                    ctx.shadowBlur = blink ? 8 * scale : 0
-                    ctx.beginPath()
-                    ctx.arc(antX, y - 27 * scale, 2 * scale, 0, Math.PI * 2)
-                    ctx.fill()
-                    ctx.shadowBlur = 0
-                }
-
-                // Setback / rooftop structure
-                if (bh > 160 * scale && seededRand(seed * 1.5) > 0.4) {
-                    const setbackW = bw * 0.5
-                    const setbackH = bh * 0.2
-                    ctx.fillStyle = `rgb(${baseR - 5}, ${baseG - 5}, ${baseB})`
-                    ctx.fillRect(bx + (bw - setbackW) / 2, y - setbackH, setbackW, setbackH)
-                    // Water tank or vent on top
-                    ctx.fillStyle = '#3a3a45'
-                    ctx.fillRect(bx + bw * 0.4, y - setbackH - 12 * scale, 8 * scale, 12 * scale)
-                }
-
-                // Neon signs with enhanced glow
-                if (b.hasSign && b.signText) {
-                    const signColors = ['#ff00ff', '#00ffff', '#ff6600', '#00ff88', '#ff0066']
-                    const signColor = signColors[Math.floor(seededRand(seed * 2) * signColors.length)]
-
-                    if (b.signVertical) {
-                        // Vertical neon sign
-                        ctx.shadowColor = signColor
-                        ctx.shadowBlur = 15 * scale
-                        ctx.fillStyle = signColor
-                        ctx.font = `bold ${11 * scale}px sans-serif`
-                        const chars = b.signText.split('')
-                        chars.forEach((char, i) => {
-                            ctx.fillText(char, bx + bw + 4 * scale, y + 25 * scale + i * 15 * scale)
-                        })
-                        ctx.shadowBlur = 0
-                    } else {
-                        // Billboard sign with backing
-                        const billW = bw * 0.85
-                        const billH = 22 * scale
-                        const billY = y + 20 * scale
-                        const billX = bx + (bw - billW) / 2
-
-                        // Sign backing
-                        ctx.fillStyle = '#0a0a12'
-                        ctx.fillRect(billX - 2 * scale, billY - 2 * scale, billW + 4 * scale, billH + 4 * scale)
-                        ctx.fillStyle = '#151520'
-                        ctx.fillRect(billX, billY, billW, billH)
-
-                        // Neon text with glow
-                        ctx.shadowColor = signColor
-                        ctx.shadowBlur = 12 * scale
-                        ctx.fillStyle = signColor
-                        ctx.font = `bold ${10 * scale}px monospace`
-                        ctx.fillText(b.signText, billX + 5 * scale, billY + 15 * scale)
-                        ctx.shadowBlur = 0
-                    }
-                }
             }
 
-            const buildings: BuildingDef[] = [
-                { x: 30, w: 45, h: 220, depth: 5 },
-                { x: 85, w: 55, h: 280, depth: 5, hasSign: true, signText: 'å®‡å®™ä¸­', signVertical: true },
-                { x: 150, w: 40, h: 190, depth: 5 },
-                { x: 200, w: 60, h: 350, depth: 5 },
-                { x: 270, w: 50, h: 240, depth: 5 },
-                { x: 330, w: 55, h: 300, depth: 5 },
-                { x: 10, w: 55, h: 180, depth: 4, hasSign: true, signText: 'NEO-TOKYO', signVertical: false },
-                { x: 70, w: 48, h: 250, depth: 4 },
-                { x: 130, w: 60, h: 200, depth: 4 },
-                { x: 195, w: 45, h: 320, depth: 4, hasSign: true, signText: 'ãƒ©ãƒ¼ãƒ¡ãƒ³', signVertical: true },
-                { x: 250, w: 55, h: 230, depth: 4 },
-                { x: 315, w: 50, h: 270, depth: 4 },
-                { x: 370, w: 40, h: 200, depth: 4 },
-                { x: -10, w: 70, h: 160, depth: 3 },
-                { x: 55, w: 65, h: 220, depth: 3, hasSign: true, signText: 'RAMEN', signVertical: false },
-                { x: 125, w: 50, h: 180, depth: 3 },
-                { x: 180, w: 70, h: 300, depth: 3, hasSign: true, signText: 'å…¨å›½èˆª', signVertical: true },
-                { x: 260, w: 55, h: 240, depth: 3 },
-                { x: 320, w: 65, h: 190, depth: 3, hasSign: true, signText: 'CYBER', signVertical: false },
-                { x: 390, w: 50, h: 220, depth: 3 },
-                { x: -20, w: 80, h: 140, depth: 2 },
-                { x: 60, w: 75, h: 200, depth: 2, hasSign: true, signText: 'ãƒã‚ªæ±äº¬', signVertical: true },
-                { x: 145, w: 60, h: 160, depth: 2 },
-                { x: 210, w: 80, h: 280, depth: 2, hasSign: true, signText: 'CYBERNETICS', signVertical: false },
-                { x: 300, w: 70, h: 210, depth: 2 },
-                { x: 380, w: 60, h: 170, depth: 2 },
-                { x: -40, w: 100, h: 120, depth: 1 },
-                { x: 70, w: 90, h: 180, depth: 1, hasSign: true, signText: 'ã‚¤ãƒ¼ãƒ‘ãƒ‹ã‚¹', signVertical: true },
-                { x: 170, w: 85, h: 150, depth: 1 },
-                { x: 270, w: 95, h: 200, depth: 1, hasSign: true, signText: 'å…¨å›½èˆª', signVertical: true },
-                { x: 375, w: 80, h: 140, depth: 1 },
-            ]
+            // Draw front skyline (faster, closer)
+            if (skylineFront.current) {
+                skylineFrontX.current -= skyScrollSpeed * 0.6
+                const frontImg = skylineFront.current
+                const frontH = GROUND_Y - HORIZON_Y + 80 * scale
+                const frontW = frontImg.width * (frontH / frontImg.height)
+                if (skylineFrontX.current <= -frontW) skylineFrontX.current = 0
+                ctx.drawImage(frontImg, skylineFrontX.current, HORIZON_Y - 80 * scale, frontW, frontH)
+                ctx.drawImage(frontImg, skylineFrontX.current + frontW, HORIZON_Y - 80 * scale, frontW, frontH)
+            }
 
-            buildings.sort((a, b) => b.depth - a.depth)
-            buildings.forEach(b => {
-                ctx.globalAlpha = 0.4 + (1 - b.depth / 5) * 0.6
-                drawBuilding3D(b)
-            })
-            ctx.globalAlpha = 1
 
             // === BRIDGES ===
             const bridges = [
@@ -625,32 +481,6 @@ const GameEngine = () => {
             drawFlyingCar(W - (globalTime * 2) % (W + 60 * scale), 140 * scale, -1, 1)
             drawFlyingCar((globalTime * 1 + 150) % (W + 60 * scale) - 30 * scale, 200 * scale, 1, 1.2)
             drawFlyingCar(W - (globalTime * 0.8 + 80) % (W + 60 * scale), 260 * scale, -1, 0.7)
-
-            // === BILLBOARD SCREENS ===
-            ctx.fillStyle = '#101018'
-            ctx.fillRect(20 * scale, GROUND_Y - 350 * scale, 70 * scale, 45 * scale)
-            const leftScreenGrad = ctx.createLinearGradient(20 * scale, GROUND_Y - 350 * scale, 90 * scale, GROUND_Y - 305 * scale)
-            const screenPulse = (Math.sin(globalTime * 0.08) + 1) / 2
-            leftScreenGrad.addColorStop(0, `rgba(0, 200, 255, ${0.5 + screenPulse * 0.3})`)
-            leftScreenGrad.addColorStop(1, `rgba(100, 0, 200, ${0.5 + screenPulse * 0.3})`)
-            ctx.fillStyle = leftScreenGrad
-            ctx.fillRect(22 * scale, GROUND_Y - 348 * scale, 66 * scale, 41 * scale)
-            ctx.fillStyle = '#ffffff'
-            ctx.font = `bold ${8 * scale}px monospace`
-            ctx.fillText('SYSTEM', 28 * scale, GROUND_Y - 330 * scale)
-            ctx.fillText('ONLINE', 28 * scale, GROUND_Y - 318 * scale)
-
-            ctx.fillStyle = '#101018'
-            ctx.fillRect(310 * scale, GROUND_Y - 280 * scale, 75 * scale, 50 * scale)
-            const rightScreenGrad = ctx.createLinearGradient(310 * scale, GROUND_Y - 280 * scale, 385 * scale, GROUND_Y - 230 * scale)
-            rightScreenGrad.addColorStop(0, `rgba(255, 100, 0, ${0.4 + screenPulse * 0.4})`)
-            rightScreenGrad.addColorStop(1, `rgba(255, 0, 100, ${0.4 + screenPulse * 0.4})`)
-            ctx.fillStyle = rightScreenGrad
-            ctx.fillRect(312 * scale, GROUND_Y - 278 * scale, 71 * scale, 46 * scale)
-            ctx.fillStyle = '#ffffff'
-            ctx.font = `bold ${9 * scale}px monospace`
-            ctx.fillText('NEURAL-NET', 318 * scale, GROUND_Y - 255 * scale)
-            ctx.fillText('v3.7.2', 330 * scale, GROUND_Y - 242 * scale)
 
             // === GROUND ===
             ctx.fillStyle = '#080810'
