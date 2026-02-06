@@ -44,6 +44,12 @@ const GameEngine = () => {
     const topTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(TOP_TOWER_PATHS.length).fill(null))
     const bottomTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(BOTTOM_TOWER_PATHS.length).fill(null))
 
+    // Railcart animation system
+    const railcartSprite = useRef<HTMLImageElement | null>(null)
+    const railcart = useRef<{ x: number, speed: number } | null>(null)
+    const railcartSpawnTimer = useRef(0)
+    const RAIL_Y_PERCENT = 0.35 // Rail position (35% from top)
+
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
     const powerUpEndTime = useRef(0)
@@ -218,6 +224,10 @@ const GameEngine = () => {
             towerImg.src = path
             towerImg.onload = () => { bottomTowerSprites.current[index] = towerImg }
         })
+        // Load railcart sprite
+        const railcartImg = new Image()
+        railcartImg.src = '/railcart.png'
+        railcartImg.onload = () => { railcartSprite.current = railcartImg }
     }, [])
 
     const resetGame = () => {
@@ -514,6 +524,49 @@ const GameEngine = () => {
             drawFlyingCar(W - (globalTime * 2) % (W + 60 * scale), 140 * scale, -1, 1)
             drawFlyingCar((globalTime * 1 + 150) % (W + 60 * scale) - 30 * scale, 200 * scale, 1, 1.2)
             drawFlyingCar(W - (globalTime * 0.8 + 80) % (W + 60 * scale), 260 * scale, -1, 0.7)
+
+            // === RAIL TRACK ===
+            const RAIL_Y = H * RAIL_Y_PERCENT
+            // Draw rail supports
+            ctx.fillStyle = '#1a1a25'
+            for (let rx = 0; rx < W; rx += 80 * scale) {
+                ctx.fillRect(rx, RAIL_Y, 4 * scale, GROUND_Y - RAIL_Y)
+            }
+            // Draw rail track
+            ctx.fillStyle = '#3a3a45'
+            ctx.fillRect(0, RAIL_Y - 4 * scale, W, 8 * scale)
+            ctx.strokeStyle = '#5a5a65'
+            ctx.lineWidth = 2 * scale
+            ctx.beginPath()
+            ctx.moveTo(0, RAIL_Y - 4 * scale)
+            ctx.lineTo(W, RAIL_Y - 4 * scale)
+            ctx.stroke()
+            ctx.beginPath()
+            ctx.moveTo(0, RAIL_Y + 4 * scale)
+            ctx.lineTo(W, RAIL_Y + 4 * scale)
+            ctx.stroke()
+
+            // === RAILCART ANIMATION ===
+            if (gameState === 'PLAYING') {
+                railcartSpawnTimer.current++
+                // Random spawn every ~5-10 seconds (300-600 frames at 60fps)
+                if (!railcart.current && railcartSpawnTimer.current > 300 && Math.random() < 0.005) {
+                    railcart.current = { x: -100 * scale, speed: (15 + Math.random() * 10) * scale }
+                    railcartSpawnTimer.current = 0
+                }
+            }
+
+            if (railcart.current && railcartSprite.current) {
+                railcart.current.x += railcart.current.speed
+                const cartW = 80 * scale
+                const cartH = cartW * (railcartSprite.current.height / railcartSprite.current.width)
+                ctx.drawImage(railcartSprite.current, railcart.current.x, RAIL_Y - cartH + 4 * scale, cartW, cartH)
+
+                // Remove when off screen
+                if (railcart.current.x > W + 100 * scale) {
+                    railcart.current = null
+                }
+            }
 
             // === GROUND ===
             ctx.fillStyle = '#080810'
@@ -957,9 +1010,10 @@ const GameEngine = () => {
                                 ctx.clip()
 
                                 const spriteAspect = towerSprite.width / towerSprite.height
-                                // Fixed width, calculate height from aspect ratio - clipping handles the rest
-                                const targetW = ow * 1.8
-                                const targetH = targetW / spriteAspect
+                                // Scale to fill obstacle area - use whichever is larger to ensure no gaps
+                                const widthBasedH = (ow * 1.8) / spriteAspect
+                                const targetH = Math.max(widthBasedH, oh)
+                                const targetW = targetH * spriteAspect
 
                                 if (isTop) {
                                     // Top obstacle: flip vertically, align bottom of sprite to bottom of obstacle area
