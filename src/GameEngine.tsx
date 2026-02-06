@@ -340,75 +340,207 @@ const GameEngine = () => {
             drawFogLayer(HORIZON_Y + 20 * scale, 0.5, 0.12, 1.2)
             drawFogLayer(HORIZON_Y + 80 * scale, 0.8, 0.08, 1.0)
 
-            // === BUILDING HELPER FUNCTION ===
+            // === DETAILED CYBERPUNK BUILDING HELPER FUNCTION ===
             type BuildingDef = { x: number, w: number, h: number, depth: number, hasSign?: boolean, signText?: string, signVertical?: boolean }
 
             const drawBuilding3D = (b: BuildingDef) => {
                 const bx = b.x * scale
                 const bw = b.w * scale
                 const bh = b.h * scale
-                const baseColor = `rgb(${Math.floor(15 + b.depth * 12)}, ${Math.floor(15 + b.depth * 10)}, ${Math.floor(25 + b.depth * 8)})`
                 const y = GROUND_Y - bh
+                const seed = b.x * 123.456
 
-                ctx.fillStyle = baseColor
+                // Base building - grungy metal panels
+                const baseR = Math.floor(25 + b.depth * 8)
+                const baseG = Math.floor(30 + b.depth * 7)
+                const baseB = Math.floor(35 + b.depth * 6)
+
+                // Draw main building with gradient
+                const buildGrad = ctx.createLinearGradient(bx, y, bx + bw, y)
+                buildGrad.addColorStop(0, `rgb(${baseR - 10}, ${baseG - 10}, ${baseB - 5})`)
+                buildGrad.addColorStop(0.5, `rgb(${baseR}, ${baseG}, ${baseB})`)
+                buildGrad.addColorStop(1, `rgb(${baseR - 15}, ${baseG - 12}, ${baseB - 8})`)
+                ctx.fillStyle = buildGrad
                 ctx.fillRect(bx, y, bw, bh)
 
-                if (bh > 150 * scale && seededRand(b.x * 1.5) > 0.4) {
-                    const setbackW = bw * 0.6
-                    const setbackH = bh * 0.3
-                    ctx.fillRect(bx + (bw - setbackW) / 2, y - setbackH, setbackW, setbackH)
-
-                    ctx.fillStyle = '#333'
-                    ctx.fillRect(bx + bw / 2 - 2 * scale, y - setbackH - 25 * scale, 4 * scale, 25 * scale)
-                    ctx.fillStyle = '#ff0000'
-                    ctx.fillRect(bx + bw / 2 - 2 * scale, y - setbackH - 25 * scale, 4 * scale, 4 * scale)
+                // Rust spots / weathering
+                for (let i = 0; i < 8; i++) {
+                    const rx = bx + seededRand(seed + i) * bw * 0.8
+                    const ry = y + seededRand(seed + i * 2) * bh * 0.9
+                    const rSize = (3 + seededRand(seed + i * 3) * 5) * scale
+                    ctx.fillStyle = `rgba(${80 + seededRand(seed + i) * 40}, ${40 + seededRand(seed + i) * 20}, ${20}, 0.4)`
+                    ctx.beginPath()
+                    ctx.arc(rx, ry, rSize, 0, Math.PI * 2)
+                    ctx.fill()
                 }
 
-                ctx.fillStyle = `rgb(${Math.floor(10 + b.depth * 8)}, ${Math.floor(10 + b.depth * 6)}, ${Math.floor(15 + b.depth * 5)})`
-                ctx.fillRect(bx + 3 * scale, y - 6 * scale, 8 * scale, 6 * scale)
-                ctx.fillRect(bx + bw - 12 * scale, y - 10 * scale, 6 * scale, 10 * scale)
+                // Metal panel lines (horizontal)
+                ctx.strokeStyle = `rgba(0, 0, 0, 0.3)`
+                ctx.lineWidth = 1 * scale
+                for (let py = y + 15 * scale; py < GROUND_Y; py += 25 * scale) {
+                    if (seededRand(py * 0.1 + seed) > 0.4) {
+                        ctx.beginPath()
+                        ctx.moveTo(bx + 2 * scale, py)
+                        ctx.lineTo(bx + bw - 2 * scale, py)
+                        ctx.stroke()
+                    }
+                }
 
-                const winColors = ['#00ffff', '#ff00ff', '#ffaa00', '#00ff88', '#ff6644']
+                // Exposed pipes on sides
+                if (seededRand(seed * 1.1) > 0.5) {
+                    const pipeX = bx + (seededRand(seed) > 0.5 ? bw - 4 * scale : 2 * scale)
+                    ctx.fillStyle = '#444'
+                    ctx.fillRect(pipeX, y + 20 * scale, 4 * scale, bh - 40 * scale)
+                    ctx.fillStyle = '#555'
+                    ctx.fillRect(pipeX + 1 * scale, y + 20 * scale, 2 * scale, bh - 40 * scale)
+                    // Pipe joints
+                    for (let jy = y + 40 * scale; jy < GROUND_Y - 30 * scale; jy += 35 * scale) {
+                        ctx.fillStyle = '#333'
+                        ctx.fillRect(pipeX - 1 * scale, jy, 6 * scale, 4 * scale)
+                    }
+                }
+
+                // AC Units
+                if (bw > 40 * scale && seededRand(seed * 1.2) > 0.4) {
+                    const numAC = Math.floor(seededRand(seed * 1.3) * 3) + 1
+                    for (let a = 0; a < numAC; a++) {
+                        const acX = bx + 8 * scale + seededRand(seed + a) * (bw - 30 * scale)
+                        const acY = y + 30 * scale + seededRand(seed + a * 2) * (bh * 0.4)
+                        const acW = 12 * scale
+                        const acH = 8 * scale
+                        // AC body
+                        ctx.fillStyle = '#555'
+                        ctx.fillRect(acX, acY, acW, acH)
+                        ctx.fillStyle = '#444'
+                        ctx.fillRect(acX + 1 * scale, acY + 1 * scale, acW - 2 * scale, acH - 2 * scale)
+                        // Vent lines
+                        ctx.strokeStyle = '#333'
+                        ctx.lineWidth = 0.5 * scale
+                        for (let vl = 0; vl < 4; vl++) {
+                            ctx.beginPath()
+                            ctx.moveTo(acX + 2 * scale, acY + 2 * scale + vl * 1.5 * scale)
+                            ctx.lineTo(acX + acW - 2 * scale, acY + 2 * scale + vl * 1.5 * scale)
+                            ctx.stroke()
+                        }
+                    }
+                }
+
+                // Cable clusters
+                if (seededRand(seed * 1.4) > 0.6) {
+                    const cableX = bx + seededRand(seed * 1.5) * bw * 0.6
+                    ctx.strokeStyle = '#222'
+                    ctx.lineWidth = 1.5 * scale
+                    for (let c = 0; c < 3; c++) {
+                        ctx.beginPath()
+                        ctx.moveTo(cableX + c * 2 * scale, y)
+                        ctx.quadraticCurveTo(
+                            cableX + c * 2 * scale + 15 * scale,
+                            y + 40 * scale,
+                            cableX + c * 2 * scale + 5 * scale,
+                            y + 80 * scale
+                        )
+                        ctx.stroke()
+                    }
+                }
+
+                // Windows with varied light patterns
+                const winColors = ['#00ffff', '#ff00ff', '#ffaa00', '#00ff88', '#ff6644', '#ffffff', '#4488ff']
                 const winW = 3 * scale, winH = 4 * scale
-                for (let wy = y + 8 * scale; wy < GROUND_Y - 8 * scale; wy += 7 * scale) {
-                    for (let wx = bx + 4 * scale; wx < bx + bw - 4 * scale; wx += 6 * scale) {
-                        if (seededRand(wx * wy * 0.001 + b.x) > 0.3) {
+                for (let wy = y + 12 * scale; wy < GROUND_Y - 12 * scale; wy += 8 * scale) {
+                    for (let wx = bx + 5 * scale; wx < bx + bw - 5 * scale; wx += 7 * scale) {
+                        const winRand = seededRand(wx * wy * 0.001 + b.x)
+                        if (winRand > 0.25) {
                             const colorIdx = Math.floor(seededRand(wx + wy) * winColors.length)
+                            const brightness = 0.4 + seededRand(wx * wy) * 0.6
                             ctx.fillStyle = winColors[colorIdx]
-                            ctx.globalAlpha = 0.6 + seededRand(wx * wy) * 0.4
+                            ctx.globalAlpha = brightness
                             ctx.fillRect(wx, wy, winW, winH)
+                            // Window frame
+                            ctx.strokeStyle = 'rgba(0,0,0,0.5)'
+                            ctx.lineWidth = 0.5 * scale
+                            ctx.strokeRect(wx, wy, winW, winH)
                         }
                     }
                 }
                 ctx.globalAlpha = 1
 
+                // Satellite dish (on taller buildings)
+                if (bh > 180 * scale && seededRand(seed * 1.6) > 0.5) {
+                    const dishX = bx + bw * 0.7
+                    const dishY = y + 10 * scale
+                    const dishSize = 10 * scale
+                    ctx.fillStyle = '#666'
+                    ctx.beginPath()
+                    ctx.ellipse(dishX, dishY, dishSize, dishSize * 0.4, -0.3, 0, Math.PI)
+                    ctx.fill()
+                    ctx.fillStyle = '#444'
+                    ctx.fillRect(dishX - 1 * scale, dishY, 2 * scale, 15 * scale)
+                }
+
+                // Rooftop antenna with blinking light
+                if (bh > 150 * scale && seededRand(seed * 1.7) > 0.4) {
+                    const antX = bx + bw * 0.3 + seededRand(seed * 1.8) * bw * 0.4
+                    ctx.fillStyle = '#333'
+                    ctx.fillRect(antX - 1 * scale, y - 25 * scale, 2 * scale, 25 * scale)
+                    // Blinking light
+                    const blink = Math.sin(globalTime * 0.1 + seed) > 0
+                    ctx.fillStyle = blink ? '#ff0000' : '#440000'
+                    ctx.shadowColor = blink ? '#ff0000' : 'transparent'
+                    ctx.shadowBlur = blink ? 8 * scale : 0
+                    ctx.beginPath()
+                    ctx.arc(antX, y - 27 * scale, 2 * scale, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.shadowBlur = 0
+                }
+
+                // Setback / rooftop structure
+                if (bh > 160 * scale && seededRand(seed * 1.5) > 0.4) {
+                    const setbackW = bw * 0.5
+                    const setbackH = bh * 0.2
+                    ctx.fillStyle = `rgb(${baseR - 5}, ${baseG - 5}, ${baseB})`
+                    ctx.fillRect(bx + (bw - setbackW) / 2, y - setbackH, setbackW, setbackH)
+                    // Water tank or vent on top
+                    ctx.fillStyle = '#3a3a45'
+                    ctx.fillRect(bx + bw * 0.4, y - setbackH - 12 * scale, 8 * scale, 12 * scale)
+                }
+
+                // Neon signs with enhanced glow
                 if (b.hasSign && b.signText) {
-                    const signColor = seededRand(b.x * 2) > 0.5 ? '#ff00ff' : '#00ffff'
-                    ctx.shadowColor = signColor
-                    ctx.shadowBlur = 10 * scale
-                    ctx.fillStyle = signColor
+                    const signColors = ['#ff00ff', '#00ffff', '#ff6600', '#00ff88', '#ff0066']
+                    const signColor = signColors[Math.floor(seededRand(seed * 2) * signColors.length)]
 
                     if (b.signVertical) {
-                        ctx.font = `bold ${10 * scale}px sans-serif`
+                        // Vertical neon sign
+                        ctx.shadowColor = signColor
+                        ctx.shadowBlur = 15 * scale
+                        ctx.fillStyle = signColor
+                        ctx.font = `bold ${11 * scale}px sans-serif`
                         const chars = b.signText.split('')
                         chars.forEach((char, i) => {
-                            ctx.fillText(char, bx + bw + 3 * scale, y + 20 * scale + i * 14 * scale)
+                            ctx.fillText(char, bx + bw + 4 * scale, y + 25 * scale + i * 15 * scale)
                         })
-                    } else {
-                        ctx.fillStyle = '#151520'
-                        const billW = bw * 0.9
-                        const billH = 20 * scale
-                        const billY = y + 15 * scale
                         ctx.shadowBlur = 0
-                        ctx.fillRect(bx + (bw - billW) / 2, billY, billW, billH)
+                    } else {
+                        // Billboard sign with backing
+                        const billW = bw * 0.85
+                        const billH = 22 * scale
+                        const billY = y + 20 * scale
+                        const billX = bx + (bw - billW) / 2
 
+                        // Sign backing
+                        ctx.fillStyle = '#0a0a12'
+                        ctx.fillRect(billX - 2 * scale, billY - 2 * scale, billW + 4 * scale, billH + 4 * scale)
+                        ctx.fillStyle = '#151520'
+                        ctx.fillRect(billX, billY, billW, billH)
+
+                        // Neon text with glow
                         ctx.shadowColor = signColor
-                        ctx.shadowBlur = 8 * scale
+                        ctx.shadowBlur = 12 * scale
                         ctx.fillStyle = signColor
-                        ctx.font = `bold ${9 * scale}px monospace`
-                        ctx.fillText(b.signText, bx + (bw - billW) / 2 + 4 * scale, billY + 14 * scale)
+                        ctx.font = `bold ${10 * scale}px monospace`
+                        ctx.fillText(b.signText, billX + 5 * scale, billY + 15 * scale)
+                        ctx.shadowBlur = 0
                     }
-                    ctx.shadowBlur = 0
                 }
             }
 
@@ -922,20 +1054,113 @@ const GameEngine = () => {
                     p.x -= scaledPipeSpeed
 
                     if (!p.destroyed) {
-                        ctx.fillStyle = '#73bf2e'
-                        ctx.fillRect(p.x, 0, scaledPipeWidth, p.topHeight)
-                        ctx.fillRect(p.x, p.topHeight + scaledPipeGap, scaledPipeWidth, canvas.height - (p.topHeight + scaledPipeGap) - 20 * scale)
+                        const pipeSeed = p.x * 7.89
+
+                        // Draw cyberpunk building segment as obstacle (TOP)
+                        const drawObstacleSegment = (ox: number, oy: number, ow: number, oh: number, isTop: boolean) => {
+                            // Base building gradient
+                            const obsGrad = ctx.createLinearGradient(ox, oy, ox + ow, oy)
+                            obsGrad.addColorStop(0, '#2a2a35')
+                            obsGrad.addColorStop(0.5, '#353540')
+                            obsGrad.addColorStop(1, '#252530')
+                            ctx.fillStyle = obsGrad
+                            ctx.fillRect(ox, oy, ow, oh)
+
+                            // Rust spots
+                            for (let r = 0; r < 4; r++) {
+                                const rx = ox + seededRand(pipeSeed + r) * ow * 0.8
+                                const ry = oy + seededRand(pipeSeed + r * 2) * oh * 0.8
+                                const rSize = (2 + seededRand(pipeSeed + r * 3) * 3) * scale
+                                ctx.fillStyle = `rgba(90, 50, 30, 0.4)`
+                                ctx.beginPath()
+                                ctx.arc(rx, ry, rSize, 0, Math.PI * 2)
+                                ctx.fill()
+                            }
+
+                            // Metal panel lines
+                            ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)'
+                            ctx.lineWidth = 1 * scale
+                            for (let py = oy + 20 * scale; py < oy + oh - 10 * scale; py += 30 * scale) {
+                                ctx.beginPath()
+                                ctx.moveTo(ox + 3 * scale, py)
+                                ctx.lineTo(ox + ow - 3 * scale, py)
+                                ctx.stroke()
+                            }
+
+                            // Exposed pipe on side
+                            const pipeX = ox + 3 * scale
+                            ctx.fillStyle = '#3a3a42'
+                            ctx.fillRect(pipeX, oy + 10 * scale, 4 * scale, oh - 20 * scale)
+                            ctx.fillStyle = '#484850'
+                            ctx.fillRect(pipeX + 1 * scale, oy + 10 * scale, 2 * scale, oh - 20 * scale)
+                            // Pipe joints
+                            for (let jy = oy + 25 * scale; jy < oy + oh - 15 * scale; jy += 40 * scale) {
+                                ctx.fillStyle = '#2a2a32'
+                                ctx.fillRect(pipeX - 1 * scale, jy, 6 * scale, 5 * scale)
+                            }
+
+                            // AC unit
+                            if (oh > 60 * scale) {
+                                const acX = ox + ow - 18 * scale
+                                const acY = oy + (isTop ? oh - 25 * scale : 15 * scale)
+                                ctx.fillStyle = '#444'
+                                ctx.fillRect(acX, acY, 12 * scale, 10 * scale)
+                                ctx.strokeStyle = '#333'
+                                ctx.lineWidth = 0.5 * scale
+                                for (let vl = 0; vl < 4; vl++) {
+                                    ctx.beginPath()
+                                    ctx.moveTo(acX + 2 * scale, acY + 2 * scale + vl * 2 * scale)
+                                    ctx.lineTo(acX + 10 * scale, acY + 2 * scale + vl * 2 * scale)
+                                    ctx.stroke()
+                                }
+                            }
+
+                            // Windows with neon glow
+                            const winColors = ['#00ffff', '#ff00ff', '#ffaa00', '#ff6644']
+                            for (let wy = oy + 15 * scale; wy < oy + oh - 15 * scale; wy += 12 * scale) {
+                                for (let wx = ox + 12 * scale; wx < ox + ow - 12 * scale; wx += 10 * scale) {
+                                    if (seededRand(wx * wy * 0.001 + pipeSeed) > 0.4) {
+                                        const colorIdx = Math.floor(seededRand(wx + wy + pipeSeed) * winColors.length)
+                                        ctx.fillStyle = winColors[colorIdx]
+                                        ctx.globalAlpha = 0.5 + seededRand(wx * wy) * 0.5
+                                        ctx.fillRect(wx, wy, 4 * scale, 5 * scale)
+                                    }
+                                }
+                            }
+                            ctx.globalAlpha = 1
+
+                            // Danger edge glow (at gap edge)
+                            const edgeY = isTop ? oy + oh : oy
+                            ctx.shadowColor = '#ff4400'
+                            ctx.shadowBlur = 8 * scale
+                            ctx.fillStyle = '#ff4400'
+                            ctx.fillRect(ox, edgeY - (isTop ? 3 * scale : 0), ow, 3 * scale)
+                            ctx.shadowBlur = 0
+                        }
+
+                        // Draw top obstacle
+                        drawObstacleSegment(p.x, 0, scaledPipeWidth, p.topHeight, true)
+                        // Draw bottom obstacle  
+                        const bottomY = p.topHeight + scaledPipeGap
+                        const bottomH = canvas.height - bottomY - 20 * scale
+                        drawObstacleSegment(p.x, bottomY, scaledPipeWidth, bottomH, false)
 
                         if (scaledBirdX < p.x + scaledPipeWidth && scaledBirdX + scaledBirdSize > p.x &&
                             (birdY.current < p.topHeight || birdY.current + scaledBirdSize > p.topHeight + scaledPipeGap)) {
                             setGameState('GAME_OVER')
                         }
                     } else {
-                        ctx.fillStyle = '#556633'
-                        for (let d = 0; d < 5; d++) {
-                            const dx = p.x + Math.sin(d * 1.5 + globalTime * 0.2) * 20 * scale
-                            const dy = p.topHeight / 2 + Math.cos(d * 2 + globalTime * 0.3) * 30 * scale
-                            ctx.fillRect(dx, dy, 8 * scale, 8 * scale)
+                        // Destroyed debris - floating pieces
+                        ctx.fillStyle = '#3a3a45'
+                        for (let d = 0; d < 6; d++) {
+                            const dx = p.x + Math.sin(d * 1.5 + globalTime * 0.15) * 25 * scale
+                            const dy = p.topHeight / 2 + Math.cos(d * 2 + globalTime * 0.2) * 40 * scale + d * 10 * scale
+                            const dSize = (6 + d * 2) * scale
+                            ctx.fillRect(dx, dy, dSize, dSize)
+                            // Metal shine
+                            ctx.fillStyle = '#505058'
+                            ctx.fillRect(dx + 1 * scale, dy + 1 * scale, dSize * 0.4, dSize * 0.3)
+                            ctx.fillStyle = '#3a3a45'
                         }
                     }
 
