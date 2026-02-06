@@ -672,14 +672,14 @@ const GameEngine = () => {
                 const acidRainActive = timeSinceStart > ACID_RAIN_DELAY
 
                 if (acidRainActive) {
-                    // Spawn new rain drops (spawn from right side for diagonal effect)
+                    // Spawn new rain drops (slight diagonal for speed effect)
                     if (Math.random() < 0.3) {
                         rainDrops.current.push({
-                            x: canvas.width + Math.random() * 50,  // Start from right edge
-                            y: -10 - Math.random() * 50,
-                            speed: (4 + Math.random() * 3) * scale,
-                            length: (15 + Math.random() * 20) * scale,
-                            vx: -(3 + Math.random() * 2) * scale  // Move left
+                            x: Math.random() * (canvas.width + 50),  // Across the top
+                            y: -10 - Math.random() * 30,
+                            speed: (5 + Math.random() * 3) * scale,
+                            length: (20 + Math.random() * 25) * scale,
+                            vx: -(0.8 + Math.random() * 0.4) * scale  // Subtle leftward drift
                         })
                     }
 
