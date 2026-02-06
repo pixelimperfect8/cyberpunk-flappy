@@ -49,11 +49,13 @@ const GameEngine = () => {
     const splashParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
-    // Villain taunt system
-    const villainSprite = useRef<HTMLImageElement | null>(null)
+    // Villain taunt system - multiple portraits!
+    const villainSprites = useRef<HTMLImageElement[]>([])
+    const currentVillainIndex = useRef(0)
     const currentTaunt = useRef<string | null>(null)
     const tauntEndTime = useRef(0)
     const lastTauntScore = useRef(0)
+    const VILLAIN_PATHS = ['/villain.jpg', '/villain2.jpg', '/villain3.jpg']
     const TAUNT_MESSAGES = [
         "There's no place to hide, Dicky!",
         "You're dead, Dicky!",
@@ -103,17 +105,19 @@ const GameEngine = () => {
         img.onload = () => {
             dickySprite.current = img
         }
-        // Load villain sprite
-        const villainImg = new Image()
-        villainImg.crossOrigin = 'anonymous'
-        villainImg.onload = () => {
-            console.log('Villain loaded successfully')
-            villainSprite.current = villainImg
-        }
-        villainImg.onerror = (e) => {
-            console.error('Failed to load villain:', e)
-        }
-        villainImg.src = '/villain.jpg'
+        // Load all villain sprites
+        VILLAIN_PATHS.forEach((path, index) => {
+            const villainImg = new Image()
+            villainImg.crossOrigin = 'anonymous'
+            villainImg.onload = () => {
+                console.log(`Villain ${index + 1} loaded: ${path}`)
+                villainSprites.current[index] = villainImg
+            }
+            villainImg.onerror = (e) => {
+                console.error(`Failed to load villain ${index + 1}:`, path, e)
+            }
+            villainImg.src = path
+        })
     }, [])
 
     const resetGame = () => {
@@ -933,6 +937,7 @@ const GameEngine = () => {
                 // Trigger a new taunt every 5 score points
                 if (score > 0 && score % 5 === 0 && score !== lastTauntScore.current) {
                     currentTaunt.current = TAUNT_MESSAGES[Math.floor(Math.random() * TAUNT_MESSAGES.length)]
+                    currentVillainIndex.current = Math.floor(Math.random() * VILLAIN_PATHS.length) // Pick random villain!
                     tauntEndTime.current = Date.now() + 3000 // Show for 3 seconds
                     lastTauntScore.current = score
                 }
@@ -955,9 +960,10 @@ const GameEngine = () => {
                     ctx.strokeRect(faceX, faceY, faceSize, faceSize)
                     ctx.shadowBlur = 0
 
-                    // Draw villain face
-                    if (villainSprite.current) {
-                        ctx.drawImage(villainSprite.current, faceX, faceY, faceSize, faceSize)
+                    // Draw villain face - use random villain from array
+                    const villainImg = villainSprites.current[currentVillainIndex.current]
+                    if (villainImg) {
+                        ctx.drawImage(villainImg, faceX, faceY, faceSize, faceSize)
                     } else {
                         ctx.fillStyle = '#333'
                         ctx.fillRect(faceX, faceY, faceSize, faceSize)
