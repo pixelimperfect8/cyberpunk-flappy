@@ -38,9 +38,11 @@ const GameEngine = () => {
     const skylineBackX = useRef(0)
     const skylineFrontX = useRef(0)
 
-    // Tower/Obstacle sprites
-    const TOWER_PATHS = ['/tower1.png', '/tower2.png', '/tower4.png', '/tower5.png', '/tower6.png', '/tower7.png', '/tower8.png']
-    const towerSprites = useRef<(HTMLImageElement | null)[]>(new Array(TOWER_PATHS.length).fill(null))
+    // Tower/Obstacle sprites - separate arrays for top and bottom
+    const TOP_TOWER_PATHS = ['/tower1.png', '/tower4.png', '/tower5.png', '/tower6.png', '/tower8.png']
+    const BOTTOM_TOWER_PATHS = ['/tower2.png', '/tower7.png']
+    const topTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(TOP_TOWER_PATHS.length).fill(null))
+    const bottomTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(BOTTOM_TOWER_PATHS.length).fill(null))
 
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
@@ -205,11 +207,16 @@ const GameEngine = () => {
         const skyFront = new Image()
         skyFront.src = '/skyline_front.png'
         skyFront.onload = () => skylineFront.current = skyFront
-        // Load tower/obstacle sprites
-        TOWER_PATHS.forEach((path, index) => {
+        // Load tower/obstacle sprites - separate top and bottom
+        TOP_TOWER_PATHS.forEach((path, index) => {
             const towerImg = new Image()
             towerImg.src = path
-            towerImg.onload = () => { towerSprites.current[index] = towerImg }
+            towerImg.onload = () => { topTowerSprites.current[index] = towerImg }
+        })
+        BOTTOM_TOWER_PATHS.forEach((path, index) => {
+            const towerImg = new Image()
+            towerImg.src = path
+            towerImg.onload = () => { bottomTowerSprites.current[index] = towerImg }
         })
     }, [])
 
@@ -926,7 +933,7 @@ const GameEngine = () => {
                     const minPipe = 50 * scale
                     const maxPipe = canvas.height - scaledPipeGap - 50 * scale - 20 * scale
                     const height = Math.floor(Math.random() * (maxPipe - minPipe + 1)) + minPipe
-                    const towerIdx = Math.floor(Math.random() * TOWER_PATHS.length)
+                    const towerIdx = Math.floor(Math.random() * Math.max(TOP_TOWER_PATHS.length, BOTTOM_TOWER_PATHS.length))
                     pipes.current.push({ x: canvas.width, topHeight: height, passed: false, towerIndex: towerIdx })
                 }
 
@@ -937,10 +944,12 @@ const GameEngine = () => {
                     if (!p.destroyed) {
                         const pipeSeed = p.x * 7.89
 
-                        // Draw cyberpunk building segment as obstacle (TOP)
+                        // Draw cyberpunk building segment as obstacle
                         const drawObstacleSegment = (ox: number, oy: number, ow: number, oh: number, isTop: boolean, towerIdx: number = 0) => {
-                            // Use tower sprite if available
-                            const towerSprite = towerSprites.current[towerIdx]
+                            // Use tower sprite if available - select from appropriate array
+                            const spriteArray = isTop ? topTowerSprites.current : bottomTowerSprites.current
+                            const maxIdx = isTop ? TOP_TOWER_PATHS.length : BOTTOM_TOWER_PATHS.length
+                            const towerSprite = spriteArray[towerIdx % maxIdx]
                             if (towerSprite) {
                                 ctx.save()
                                 ctx.beginPath()
@@ -1055,7 +1064,7 @@ const GameEngine = () => {
                         // Draw bottom obstacle  
                         const bottomY = p.topHeight + scaledPipeGap
                         const bottomH = canvas.height - bottomY - 20 * scale
-                        drawObstacleSegment(p.x, bottomY, scaledPipeWidth, bottomH, false, ((p.towerIndex || 0) + 1) % TOWER_PATHS.length)
+                        drawObstacleSegment(p.x, bottomY, scaledPipeWidth, bottomH, false, p.towerIndex || 0)
 
                         if (scaledBirdX < p.x + scaledPipeWidth && scaledBirdX + scaledBirdSize > p.x &&
                             (birdY.current < p.topHeight || birdY.current + scaledBirdSize > p.topHeight + scaledPipeGap)) {
