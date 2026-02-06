@@ -235,7 +235,9 @@ const GameEngine = () => {
     const jump = () => {
         if (gameState === 'PLAYING') {
             const scale = getScale()
-            birdVelocity.current = LIFT * scale
+            const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+            const mobileSpeedMult = isMobile ? 1.3 : 1
+            birdVelocity.current = LIFT * scale * mobileSpeedMult
             // Fire projectile if power-up is active
             if (powerUpActive.current) {
                 projectiles.current.push({ x: 80 * scale, y: birdY.current + 15 * scale })
@@ -276,12 +278,12 @@ const GameEngine = () => {
         if (!ctx) return
 
         const scale = getScale()
-        const scaledGravity = GRAVITY * scale
-        // Dynamic values based on blue pill status
-        const bluePillMult = bluePillActive.current ? BLUE_PILL_SPEED_MULT : 1
         // Mobile speed boost - detect touch devices
         const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
         const mobileSpeedMult = isMobile ? 1.3 : 1
+        const scaledGravity = GRAVITY * scale * mobileSpeedMult
+        // Dynamic values based on blue pill status
+        const bluePillMult = bluePillActive.current ? BLUE_PILL_SPEED_MULT : 1
         const scaledPipeSpeed = PIPE_SPEED * scale * bluePillMult * mobileSpeedMult
         const scaledPipeGap = PIPE_GAP * scale
         const birdSizeMult = bluePillActive.current ? BLUE_PILL_SIZE_MULT : 1
