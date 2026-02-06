@@ -55,7 +55,7 @@ const GameEngine = () => {
     const currentTaunt = useRef<string | null>(null)
     const tauntEndTime = useRef(0)
     const lastTauntScore = useRef(0)
-    const VILLAIN_PATHS = ['/villain.jpg', '/villain2.jpg', '/villain3.jpg']
+    const VILLAIN_PATHS = ['/villain.jpg', '/villain2.jpg', '/villain3.jpg', '/villain4.jpg']
     const TAUNT_MESSAGES = [
         "There's no place to hide, Dicky!",
         "You're dead, Dicky!",
