@@ -22,7 +22,7 @@ const GameEngine = () => {
     const birdY = useRef(300)
     const birdVelocity = useRef(0)
     const birdRotation = useRef(0) // For rotation animation
-    const pipes = useRef<{ x: number, topHeight: number, passed: boolean, destroyed?: boolean }[]>([])
+    const pipes = useRef<{ x: number, topHeight: number, passed: boolean, destroyed?: boolean, towerIndex?: number }[]>([])
     const frameCount = useRef(0)
     const animationFrameId = useRef<number>(0)
     const dickySprite = useRef<HTMLImageElement | null>(null)
@@ -37,6 +37,10 @@ const GameEngine = () => {
     const skylineFront = useRef<HTMLImageElement | null>(null)
     const skylineBackX = useRef(0)
     const skylineFrontX = useRef(0)
+
+    // Tower/Obstacle sprites
+    const TOWER_PATHS = ['/tower1.png', '/tower2.png', '/tower4.png', '/tower5.png', '/tower6.png', '/tower7.png', '/tower8.png']
+    const towerSprites = useRef<(HTMLImageElement | null)[]>(new Array(TOWER_PATHS.length).fill(null))
 
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
@@ -201,6 +205,12 @@ const GameEngine = () => {
         const skyFront = new Image()
         skyFront.src = '/skyline_front.png'
         skyFront.onload = () => skylineFront.current = skyFront
+        // Load tower/obstacle sprites
+        TOWER_PATHS.forEach((path, index) => {
+            const towerImg = new Image()
+            towerImg.src = path
+            towerImg.onload = () => { towerSprites.current[index] = towerImg }
+        })
     }, [])
 
     const resetGame = () => {
@@ -916,7 +926,8 @@ const GameEngine = () => {
                     const minPipe = 50 * scale
                     const maxPipe = canvas.height - scaledPipeGap - 50 * scale - 20 * scale
                     const height = Math.floor(Math.random() * (maxPipe - minPipe + 1)) + minPipe
-                    pipes.current.push({ x: canvas.width, topHeight: height, passed: false })
+                    const towerIdx = Math.floor(Math.random() * TOWER_PATHS.length)
+                    pipes.current.push({ x: canvas.width, topHeight: height, passed: false, towerIndex: towerIdx })
                 }
 
                 for (let i = pipes.current.length - 1; i >= 0; i--) {
@@ -927,7 +938,38 @@ const GameEngine = () => {
                         const pipeSeed = p.x * 7.89
 
                         // Draw cyberpunk building segment as obstacle (TOP)
-                        const drawObstacleSegment = (ox: number, oy: number, ow: number, oh: number, isTop: boolean) => {
+                        const drawObstacleSegment = (ox: number, oy: number, ow: number, oh: number, isTop: boolean, towerIdx: number = 0) => {
+                            // Use tower sprite if available
+                            const towerSprite = towerSprites.current[towerIdx]
+                            if (towerSprite) {
+                                ctx.save()
+                                ctx.beginPath()
+                                ctx.rect(ox - ow * 0.4, oy, ow * 1.8, oh)
+                                ctx.clip()
+
+                                const spriteAspect = towerSprite.width / towerSprite.height
+                                const targetW = ow * 1.8
+                                const targetH = targetW / spriteAspect
+
+                                if (isTop) {
+                                    // Top obstacle: flip vertically, align bottom of sprite to bottom of obstacle area
+                                    ctx.translate(ox - ow * 0.4 + targetW / 2, oy + oh)
+                                    ctx.scale(1, -1) // Flip vertically
+                                    ctx.drawImage(towerSprite, -targetW / 2, 0, targetW, targetH)
+                                } else {
+                                    // Bottom obstacle: draw normally, align top of sprite to top of obstacle area
+                                    ctx.drawImage(towerSprite, ox - ow * 0.4, oy, targetW, targetH)
+                                }
+                                ctx.restore()
+
+                                const edgeY = isTop ? oy + oh : oy
+                                ctx.shadowColor = '#ff4400'
+                                ctx.shadowBlur = 8 * scale
+                                ctx.fillStyle = '#ff4400'
+                                ctx.fillRect(ox - ow * 0.4, edgeY - (isTop ? 3 * scale : 0), ow * 1.8, 3 * scale)
+                                ctx.shadowBlur = 0
+                                return
+                            }
                             // Base building gradient
                             const obsGrad = ctx.createLinearGradient(ox, oy, ox + ow, oy)
                             obsGrad.addColorStop(0, '#2a2a35')
@@ -1009,11 +1051,11 @@ const GameEngine = () => {
                         }
 
                         // Draw top obstacle
-                        drawObstacleSegment(p.x, 0, scaledPipeWidth, p.topHeight, true)
+                        drawObstacleSegment(p.x, 0, scaledPipeWidth, p.topHeight, true, p.towerIndex || 0)
                         // Draw bottom obstacle  
                         const bottomY = p.topHeight + scaledPipeGap
                         const bottomH = canvas.height - bottomY - 20 * scale
-                        drawObstacleSegment(p.x, bottomY, scaledPipeWidth, bottomH, false)
+                        drawObstacleSegment(p.x, bottomY, scaledPipeWidth, bottomH, false, ((p.towerIndex || 0) + 1) % TOWER_PATHS.length)
 
                         if (scaledBirdX < p.x + scaledPipeWidth && scaledBirdX + scaledBirdSize > p.x &&
                             (birdY.current < p.topHeight || birdY.current + scaledBirdSize > p.topHeight + scaledPipeGap)) {
