@@ -14,7 +14,7 @@ const GameEngine = () => {
 
     const GRAVITY = 0.15
     const LIFT = -3.5
-    const PIPE_SPEED = 2
+    const PIPE_SPEED = 2.5  // Slightly faster
     const PIPE_SPAWN_RATE = 150 // Frames between pipes
     const PIPE_GAP = 170
 
