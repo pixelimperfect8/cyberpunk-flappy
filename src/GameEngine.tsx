@@ -1014,13 +1014,6 @@ const GameEngine = () => {
                                     ctx.drawImage(towerSprite, ox - ow * 0.4, oy, targetW, targetH)
                                 }
                                 ctx.restore()
-
-                                const edgeY = isTop ? oy + oh : oy
-                                ctx.shadowColor = '#ff4400'
-                                ctx.shadowBlur = 8 * scale
-                                ctx.fillStyle = '#ff4400'
-                                ctx.fillRect(ox - ow * 0.4, edgeY - (isTop ? 3 * scale : 0), ow * 1.8, 3 * scale)
-                                ctx.shadowBlur = 0
                                 return
                             }
                             // Base building gradient
