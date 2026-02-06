@@ -49,6 +49,26 @@ const GameEngine = () => {
     const splashParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
+    // Villain taunt system
+    const villainSprite = useRef<HTMLImageElement | null>(null)
+    const currentTaunt = useRef<string | null>(null)
+    const tauntEndTime = useRef(0)
+    const lastTauntScore = useRef(0)
+    const TAUNT_MESSAGES = [
+        "There's no place to hide, Dicky!",
+        "You're dead, Dicky!",
+        "I'm coming for you!",
+        "Give up now, Dicky!",
+        "You can't escape me!",
+        "Nice try, little Dicky!",
+        "Running won't save you!",
+        "I see you, Dicky!",
+        "Your time is up!",
+        "Keep flying... it won't help!",
+        "Nowhere to run, Dicky!",
+        "This ends now!"
+    ]
+
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -83,6 +103,12 @@ const GameEngine = () => {
         img.onload = () => {
             dickySprite.current = img
         }
+        // Load villain sprite
+        const villainImg = new Image()
+        villainImg.src = '/villain.jpg'
+        villainImg.onload = () => {
+            villainSprite.current = villainImg
+        }
     }, [])
 
     const resetGame = () => {
@@ -90,6 +116,10 @@ const GameEngine = () => {
         birdY.current = 300 * scale
         birdVelocity.current = 0
         birdRotation.current = 0
+        // Reset taunt system
+        currentTaunt.current = null
+        tauntEndTime.current = 0
+        lastTauntScore.current = 0
         pipes.current = []
         frameCount.current = 0
         powerUpActive.current = false
@@ -892,6 +922,91 @@ const GameEngine = () => {
                     ctx.font = `bold ${12 * scale}px monospace`
                     ctx.fillText('ACID RAIN', canvas.width - 90 * scale, 30 * scale)
                     ctx.shadowBlur = 0
+                }
+
+                // === VILLAIN TAUNT SYSTEM ===
+                // Trigger a new taunt every 5 score points
+                if (score > 0 && score % 5 === 0 && score !== lastTauntScore.current) {
+                    currentTaunt.current = TAUNT_MESSAGES[Math.floor(Math.random() * TAUNT_MESSAGES.length)]
+                    tauntEndTime.current = Date.now() + 3000 // Show for 3 seconds
+                    lastTauntScore.current = score
+                }
+
+                // Draw taunt popup if active
+                if (currentTaunt.current && Date.now() < tauntEndTime.current) {
+                    const tauntAlpha = Math.min(1, (tauntEndTime.current - Date.now()) / 500) // Fade out
+                    ctx.globalAlpha = tauntAlpha
+
+                    // Draw villain face in bottom-left corner
+                    const faceSize = 80 * scale
+                    const faceX = 15 * scale
+                    const faceY = canvas.height - faceSize - 60 * scale
+
+                    // Face border glow
+                    ctx.shadowColor = '#ff0066'
+                    ctx.shadowBlur = 15 * scale
+                    ctx.strokeStyle = '#ff0066'
+                    ctx.lineWidth = 3 * scale
+                    ctx.strokeRect(faceX, faceY, faceSize, faceSize)
+                    ctx.shadowBlur = 0
+
+                    // Draw villain face
+                    if (villainSprite.current) {
+                        ctx.drawImage(villainSprite.current, faceX, faceY, faceSize, faceSize)
+                    } else {
+                        ctx.fillStyle = '#333'
+                        ctx.fillRect(faceX, faceY, faceSize, faceSize)
+                    }
+
+                    // Speech bubble
+                    const bubbleX = faceX + faceSize + 10 * scale
+                    const bubbleY = faceY
+                    const bubbleWidth = Math.min(200 * scale, canvas.width - bubbleX - 20 * scale)
+                    const bubbleHeight = 50 * scale
+
+                    // Bubble background
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
+                    ctx.strokeStyle = '#ff0066'
+                    ctx.lineWidth = 2 * scale
+                    ctx.beginPath()
+                    ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8 * scale)
+                    ctx.fill()
+                    ctx.stroke()
+
+                    // Bubble pointer
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
+                    ctx.beginPath()
+                    ctx.moveTo(bubbleX, bubbleY + 15 * scale)
+                    ctx.lineTo(bubbleX - 10 * scale, bubbleY + 25 * scale)
+                    ctx.lineTo(bubbleX, bubbleY + 35 * scale)
+                    ctx.fill()
+
+                    // Taunt text
+                    ctx.fillStyle = '#ff0066'
+                    ctx.shadowColor = '#ff0066'
+                    ctx.shadowBlur = 5 * scale
+                    ctx.font = `bold ${11 * scale}px monospace`
+                    ctx.textAlign = 'left'
+
+                    // Word wrap the text
+                    const words = currentTaunt.current!.split(' ')
+                    let line = ''
+                    let y = bubbleY + 20 * scale
+                    for (const word of words) {
+                        const testLine = line + word + ' '
+                        if (ctx.measureText(testLine).width > bubbleWidth - 20 * scale) {
+                            ctx.fillText(line.trim(), bubbleX + 10 * scale, y)
+                            line = word + ' '
+                            y += 15 * scale
+                        } else {
+                            line = testLine
+                        }
+                    }
+                    ctx.fillText(line.trim(), bubbleX + 10 * scale, y)
+                    ctx.shadowBlur = 0
+                    ctx.globalAlpha = 1
+                } else if (Date.now() >= tauntEndTime.current) {
+                    currentTaunt.current = null
                 }
 
                 if (birdY.current + scaledBirdSize >= canvas.height - 20 * scale || birdY.current < 0) {
