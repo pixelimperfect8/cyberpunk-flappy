@@ -525,12 +525,13 @@ const GameEngine = () => {
             drawFlyingCar((globalTime * 1 + 150) % (W + 60 * scale) - 30 * scale, 200 * scale, 1, 1.2)
             drawFlyingCar(W - (globalTime * 0.8 + 80) % (W + 60 * scale), 260 * scale, -1, 0.7)
 
-            // === RAILCART ANIMATION (runs on teal ground line) ===
+            // === RAILCART ANIMATION (runs on top teal bridge line) ===
+            const TOP_RAIL_Y = GROUND_Y - 180 * scale // Top teal bridge position
             if (gameState === 'PLAYING') {
                 railcartSpawnTimer.current++
                 // Random spawn every ~3-6 seconds (180-360 frames at 60fps)
                 if (!railcart.current && railcartSpawnTimer.current > 180 && Math.random() < 0.02) {
-                    railcart.current = { x: -150, speed: 18 + Math.random() * 12 }
+                    railcart.current = { x: -150, speed: 4 + Math.random() * 3 }
                     railcartSpawnTimer.current = 0
                 }
             }
@@ -539,13 +540,13 @@ const GameEngine = () => {
                 railcart.current.x += railcart.current.speed
                 const cartW = 80 * scale
                 const cartH = cartW * (railcartSprite.current.height / railcartSprite.current.width)
-                const cartY = GROUND_Y - cartH
+                const cartY = TOP_RAIL_Y - cartH
 
                 // Teal glow underneath the railcart
                 ctx.shadowColor = '#00ffff'
                 ctx.shadowBlur = 20 * scale
                 ctx.fillStyle = '#00ffff'
-                ctx.fillRect(railcart.current.x + 5 * scale, GROUND_Y - 3 * scale, cartW - 10 * scale, 6 * scale)
+                ctx.fillRect(railcart.current.x + 5 * scale, TOP_RAIL_Y - 3 * scale, cartW - 10 * scale, 6 * scale)
                 ctx.shadowBlur = 0
 
                 // Draw the railcart
