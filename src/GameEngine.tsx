@@ -40,7 +40,7 @@ const GameEngine = () => {
 
     // Tower/Obstacle sprites - separate arrays for top and bottom
     const TOP_TOWER_PATHS = ['/tower1.png', '/tower4.png', '/tower5.png', '/tower6.png', '/tower8.png']
-    const BOTTOM_TOWER_PATHS = ['/tower2.png', '/tower7.png']
+    const BOTTOM_TOWER_PATHS = ['/tower2.png', '/tower3.png', '/tower7.png']
     const topTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(TOP_TOWER_PATHS.length).fill(null))
     const bottomTowerSprites = useRef<(HTMLImageElement | null)[]>(new Array(BOTTOM_TOWER_PATHS.length).fill(null))
 
@@ -957,8 +957,9 @@ const GameEngine = () => {
                                 ctx.clip()
 
                                 const spriteAspect = towerSprite.width / towerSprite.height
-                                const targetW = ow * 1.8
-                                const targetH = targetW / spriteAspect
+                                // Scale to fill the obstacle area - use height as the primary dimension
+                                const targetH = oh
+                                const targetW = targetH * spriteAspect
 
                                 if (isTop) {
                                     // Top obstacle: flip vertically, align bottom of sprite to bottom of obstacle area
