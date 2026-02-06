@@ -34,7 +34,7 @@ const GameEngine = () => {
 
     // Acid rain system
     const gameStartTime = useRef(0)
-    const rainDrops = useRef<{ x: number, y: number, speed: number, length: number }[]>([])
+    const rainDrops = useRef<{ x: number, y: number, speed: number, length: number, vx: number }[]>([])
     const splashParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
@@ -672,13 +672,14 @@ const GameEngine = () => {
                 const acidRainActive = timeSinceStart > ACID_RAIN_DELAY
 
                 if (acidRainActive) {
-                    // Spawn new rain drops
+                    // Spawn new rain drops (spawn from right side for diagonal effect)
                     if (Math.random() < 0.3) {
                         rainDrops.current.push({
-                            x: Math.random() * canvas.width,
-                            y: -10,
-                            speed: (3 + Math.random() * 3) * scale,
-                            length: (15 + Math.random() * 20) * scale
+                            x: canvas.width + Math.random() * 50,  // Start from right edge
+                            y: -10 - Math.random() * 50,
+                            speed: (4 + Math.random() * 3) * scale,
+                            length: (15 + Math.random() * 20) * scale,
+                            vx: -(3 + Math.random() * 2) * scale  // Move left
                         })
                     }
 
@@ -686,15 +687,16 @@ const GameEngine = () => {
                     for (let i = rainDrops.current.length - 1; i >= 0; i--) {
                         const drop = rainDrops.current[i]
                         drop.y += drop.speed
+                        drop.x += drop.vx  // Move diagonally
 
-                        // Draw acid rain drop with glow
+                        // Draw acid rain drop with glow (diagonal line)
                         ctx.strokeStyle = '#88ff00'
                         ctx.shadowColor = '#88ff00'
                         ctx.shadowBlur = 4 * scale
                         ctx.lineWidth = 2 * scale
                         ctx.beginPath()
                         ctx.moveTo(drop.x, drop.y)
-                        ctx.lineTo(drop.x, drop.y + drop.length)
+                        ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)  // Angled line
                         ctx.stroke()
                         ctx.shadowBlur = 0
 
@@ -718,8 +720,8 @@ const GameEngine = () => {
                             continue
                         }
 
-                        // Remove drops that are off screen
-                        if (drop.y > canvas.height) {
+                        // Remove drops that are off screen (left edge or bottom)
+                        if (drop.y > canvas.height || drop.x < -50) {
                             rainDrops.current.splice(i, 1)
                         }
                     }
