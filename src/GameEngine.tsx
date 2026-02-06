@@ -26,6 +26,7 @@ const GameEngine = () => {
     const frameCount = useRef(0)
     const animationFrameId = useRef<number>(0)
     const dickySprite = useRef<HTMLImageElement | null>(null)
+    const dickyBigSprite = useRef<HTMLImageElement | null>(null) // Blue pill transformation sprite
 
     // Power-up system (green pill - good)
     const powerUpActive = useRef(false)
@@ -47,6 +48,7 @@ const GameEngine = () => {
     const gameStartTime = useRef(0)
     const rainDrops = useRef<{ x: number, y: number, speed: number, length: number, vx: number }[]>([])
     const splashParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, color: string }[]>([])
+    const explosionParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, size: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
     // Villain taunt system - multiple portraits!
@@ -84,6 +86,56 @@ const GameEngine = () => {
         })
     }
 
+    // Sound effect functions using Web Audio API
+    const playPillSound = useCallback(() => {
+        if (isMuted) return
+        try {
+            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+            const osc = ctx.createOscillator()
+            const gain = ctx.createGain()
+            osc.connect(gain)
+            gain.connect(ctx.destination)
+            osc.frequency.setValueAtTime(400, ctx.currentTime)
+            osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1)
+            osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15)
+            gain.gain.setValueAtTime(0.3, ctx.currentTime)
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+            osc.start(ctx.currentTime)
+            osc.stop(ctx.currentTime + 0.2)
+        } catch (e) {
+            console.log('Could not play pill sound', e)
+        }
+    }, [isMuted])
+
+    const playExplosionSound = useCallback(() => {
+        if (isMuted) return
+        try {
+            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+            // White noise burst for explosion
+            const bufferSize = ctx.sampleRate * 0.2
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+            const data = buffer.getChannelData(0)
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2)
+            }
+            const noise = ctx.createBufferSource()
+            noise.buffer = buffer
+            const gain = ctx.createGain()
+            const filter = ctx.createBiquadFilter()
+            filter.type = 'lowpass'
+            filter.frequency.setValueAtTime(1000, ctx.currentTime)
+            filter.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.15)
+            noise.connect(filter)
+            filter.connect(gain)
+            gain.connect(ctx.destination)
+            gain.gain.setValueAtTime(0.5, ctx.currentTime)
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2)
+            noise.start(ctx.currentTime)
+        } catch (e) {
+            console.log('Could not play explosion sound', e)
+        }
+    }, [isMuted])
+
     // Resize handler
     useEffect(() => {
         const handleResize = () => {
@@ -104,6 +156,13 @@ const GameEngine = () => {
         img.src = '/dicky.png'
         img.onload = () => {
             dickySprite.current = img
+        }
+        // Load big dicky sprite for blue pill transformation
+        const bigImg = new Image()
+        bigImg.src = '/dicky_big.png'
+        bigImg.onload = () => {
+            console.log('Big Dicky sprite loaded')
+            dickyBigSprite.current = bigImg
         }
         // Load all villain sprites
         VILLAIN_PATHS.forEach((path, index) => {
@@ -579,8 +638,13 @@ const GameEngine = () => {
             }
 
             // Draw the sprite or fallback to colored square
-            if (dickySprite.current) {
-                // Draw sprite centered, with aspect ratio preserved
+            if (bluePillActive.current && dickyBigSprite.current) {
+                // Blue pill transformation - use big dicky sprite!
+                const spriteW = scaledBirdSize * 3.5  // Even bigger for transformation
+                const spriteH = scaledBirdSize * 2.5
+                ctx.drawImage(dickyBigSprite.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
+            } else if (dickySprite.current) {
+                // Normal sprite
                 const spriteW = scaledBirdSize * 2.5  // Wider for the horizontal sprite
                 const spriteH = scaledBirdSize * 1.5
                 ctx.drawImage(dickySprite.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
@@ -674,6 +738,7 @@ const GameEngine = () => {
                         powerUpActive.current = true
                         powerUpEndTime.current = Date.now() + 5000
                         pill.current = null
+                        playPillSound() // Play sound on pill collect
                     }
 
                     if (pill.current && pill.current.x < -50 * scale) {
@@ -737,6 +802,7 @@ const GameEngine = () => {
                         bluePillActive.current = true
                         bluePillEndTime.current = Date.now() + BLUE_PILL_DURATION
                         bluePill.current = null
+                        playPillSound() // Play sound on pill collect
                     }
 
                     if (bluePill.current && bluePill.current.x < -50 * scale) {
@@ -774,11 +840,41 @@ const GameEngine = () => {
                             if (proj.y < p.topHeight) {
                                 p.destroyed = true
                                 projectiles.current.splice(i, 1)
+                                // Spawn explosion particles!
+                                for (let k = 0; k < 15; k++) {
+                                    const angle = Math.random() * Math.PI * 2
+                                    const speed = (3 + Math.random() * 5) * scale
+                                    explosionParticles.current.push({
+                                        x: proj.x,
+                                        y: proj.y,
+                                        vx: Math.cos(angle) * speed,
+                                        vy: Math.sin(angle) * speed,
+                                        life: 1,
+                                        size: (5 + Math.random() * 8) * scale,
+                                        color: Math.random() > 0.5 ? '#ff8800' : '#ffcc00'
+                                    })
+                                }
+                                playExplosionSound()
                                 break
                             }
                             if (proj.y > p.topHeight + scaledPipeGap) {
                                 p.destroyed = true
                                 projectiles.current.splice(i, 1)
+                                // Spawn explosion particles!
+                                for (let k = 0; k < 15; k++) {
+                                    const angle = Math.random() * Math.PI * 2
+                                    const speed = (3 + Math.random() * 5) * scale
+                                    explosionParticles.current.push({
+                                        x: proj.x,
+                                        y: proj.y,
+                                        vx: Math.cos(angle) * speed,
+                                        vy: Math.sin(angle) * speed,
+                                        life: 1,
+                                        size: (5 + Math.random() * 8) * scale,
+                                        color: Math.random() > 0.5 ? '#ff8800' : '#ffcc00'
+                                    })
+                                }
+                                playExplosionSound()
                                 break
                             }
                         }
@@ -786,6 +882,29 @@ const GameEngine = () => {
 
                     if (proj.x > canvas.width + 20 * scale) {
                         projectiles.current.splice(i, 1)
+                    }
+                }
+
+                // === EXPLOSION PARTICLES ===
+                for (let i = explosionParticles.current.length - 1; i >= 0; i--) {
+                    const p = explosionParticles.current[i]
+                    p.x += p.vx
+                    p.y += p.vy
+                    p.vy += 0.2 * scale // Gravity
+                    p.life -= 0.03
+
+                    if (p.life <= 0) {
+                        explosionParticles.current.splice(i, 1)
+                    } else {
+                        ctx.globalAlpha = p.life
+                        ctx.shadowColor = p.color
+                        ctx.shadowBlur = 10 * scale
+                        ctx.fillStyle = p.color
+                        ctx.beginPath()
+                        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.shadowBlur = 0
+                        ctx.globalAlpha = 1
                     }
                 }
 
