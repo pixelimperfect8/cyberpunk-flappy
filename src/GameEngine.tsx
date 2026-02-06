@@ -32,6 +32,12 @@ const GameEngine = () => {
     const pillSpawnTimer = useRef(0)
     const projectiles = useRef<{ x: number, y: number }[]>([])
 
+    // Acid rain system
+    const gameStartTime = useRef(0)
+    const rainDrops = useRef<{ x: number, y: number, speed: number, length: number }[]>([])
+    const splashParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, color: string }[]>([])
+    const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
+
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -70,6 +76,10 @@ const GameEngine = () => {
         pill.current = null
         pillSpawnTimer.current = 0
         projectiles.current = []
+        // Reset acid rain
+        rainDrops.current = []
+        splashParticles.current = []
+        gameStartTime.current = 0
         setScore(0)
         setGameState('START')
     }
@@ -77,6 +87,7 @@ const GameEngine = () => {
     const startGame = () => {
         resetGame()
         setGameState('PLAYING')
+        gameStartTime.current = Date.now() // Track when game started for acid rain
         // Start background music
         if (audioRef.current) {
             audioRef.current.currentTime = 0
@@ -653,6 +664,95 @@ const GameEngine = () => {
                     ctx.fillText(`âš¡ POWER: ${timeLeft}s`, 10 * scale, 50 * scale)
                     ctx.font = `${12 * scale}px monospace`
                     ctx.fillText('(Jump to shoot!)', 10 * scale, 68 * scale)
+                    ctx.shadowBlur = 0
+                }
+
+                // === ACID RAIN SYSTEM ===
+                const timeSinceStart = Date.now() - gameStartTime.current
+                const acidRainActive = timeSinceStart > ACID_RAIN_DELAY
+
+                if (acidRainActive) {
+                    // Spawn new rain drops
+                    if (Math.random() < 0.3) {
+                        rainDrops.current.push({
+                            x: Math.random() * canvas.width,
+                            y: -10,
+                            speed: (3 + Math.random() * 3) * scale,
+                            length: (15 + Math.random() * 20) * scale
+                        })
+                    }
+
+                    // Update and draw rain drops
+                    for (let i = rainDrops.current.length - 1; i >= 0; i--) {
+                        const drop = rainDrops.current[i]
+                        drop.y += drop.speed
+
+                        // Draw acid rain drop with glow
+                        ctx.strokeStyle = '#88ff00'
+                        ctx.shadowColor = '#88ff00'
+                        ctx.shadowBlur = 4 * scale
+                        ctx.lineWidth = 2 * scale
+                        ctx.beginPath()
+                        ctx.moveTo(drop.x, drop.y)
+                        ctx.lineTo(drop.x, drop.y + drop.length)
+                        ctx.stroke()
+                        ctx.shadowBlur = 0
+
+                        // Check collision with bird
+                        if (drop.x > scaledBirdX && drop.x < scaledBirdX + scaledBirdSize &&
+                            drop.y + drop.length > birdY.current && drop.y < birdY.current + scaledBirdSize) {
+                            // Create splash particles!
+                            for (let j = 0; j < 8; j++) {
+                                const angle = (Math.PI / 4) + (Math.random() * Math.PI / 2)
+                                const speed = (2 + Math.random() * 4) * scale
+                                splashParticles.current.push({
+                                    x: drop.x,
+                                    y: birdY.current,
+                                    vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
+                                    vy: -Math.abs(Math.sin(angle) * speed),
+                                    life: 30,
+                                    color: Math.random() > 0.5 ? '#88ff00' : '#aaff44'
+                                })
+                            }
+                            rainDrops.current.splice(i, 1)
+                            continue
+                        }
+
+                        // Remove drops that are off screen
+                        if (drop.y > canvas.height) {
+                            rainDrops.current.splice(i, 1)
+                        }
+                    }
+
+                    // Update and draw splash particles
+                    for (let i = splashParticles.current.length - 1; i >= 0; i--) {
+                        const p = splashParticles.current[i]
+                        p.x += p.vx
+                        p.y += p.vy
+                        p.vy += 0.2 * scale
+                        p.life--
+
+                        ctx.globalAlpha = p.life / 30
+                        ctx.fillStyle = p.color
+                        ctx.shadowColor = p.color
+                        ctx.shadowBlur = 6 * scale
+                        ctx.beginPath()
+                        ctx.arc(p.x, p.y, 3 * scale, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.shadowBlur = 0
+                        ctx.globalAlpha = 1
+
+                        if (p.life <= 0) {
+                            splashParticles.current.splice(i, 1)
+                        }
+                    }
+
+                    // Acid rain warning text
+                    ctx.fillStyle = '#88ff00'
+                    ctx.shadowColor = '#88ff00'
+                    ctx.shadowBlur = 10 * scale
+                    ctx.font = `bold ${12 * scale}px monospace`
+                    ctx.fillText('ACID RAIN', canvas.width - 90 * scale, 30 * scale)
                     ctx.shadowBlur = 0
                 }
 
