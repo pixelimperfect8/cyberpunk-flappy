@@ -72,6 +72,17 @@ const GameEngine = () => {
     const explosionParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, size: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
+    // Sandstorm weather system
+    const sandParticles = useRef<{ x: number, y: number, speed: number, size: number, opacity: number }[]>([])
+    const SANDSTORM_DELAY = 30000 // 30 seconds before sandstorm starts
+
+    // Dev mode controls
+    const [devModeOpen, setDevModeOpen] = useState(false)
+    const greenPillsEnabled = useRef(true)
+    const bluePillsEnabled = useRef(true)
+    const acidRainEnabled = useRef(true)
+    const sandstormEnabled = useRef(true)
+
     // Villain taunt system - multiple portraits!
     const villainSprites = useRef<HTMLImageElement[]>([])
     const currentVillainIndex = useRef(0)
@@ -227,6 +238,17 @@ const GameEngine = () => {
         const railcartImg = new Image()
         railcartImg.src = '/railcart.png'
         railcartImg.onload = () => { railcartSprite.current = railcartImg }
+    }, [])
+
+    // Dev mode keyboard listener
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === '`' || e.key === '~') {
+                setDevModeOpen(prev => !prev)
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
     }, [])
 
     const resetGame = () => {
@@ -734,7 +756,7 @@ const GameEngine = () => {
 
                 // === PILL ===
                 pillSpawnTimer.current++
-                if (!pill.current && pillSpawnTimer.current > 500 && Math.random() < 0.02 && pipes.current.length > 0) {
+                if (!pill.current && pillSpawnTimer.current > 500 && Math.random() < 0.02 && pipes.current.length > 0 && greenPillsEnabled.current) {
                     const lastPipe = pipes.current[pipes.current.length - 1]
                     const gapCenter = lastPipe.topHeight + scaledPipeGap / 2
                     pill.current = { x: canvas.width + 20 * scale, y: gapCenter - 10 * scale, rotation: 0 }
@@ -809,7 +831,7 @@ const GameEngine = () => {
 
                 // === BLUE PILL (DEBUFF) ===
                 bluePillSpawnTimer.current++
-                if (!bluePill.current && bluePillSpawnTimer.current > 800 && Math.random() < 0.008 && pipes.current.length > 0) {
+                if (!bluePill.current && bluePillSpawnTimer.current > 800 && Math.random() < 0.008 && pipes.current.length > 0 && bluePillsEnabled.current) {
                     const lastPipe = pipes.current[pipes.current.length - 1]
                     const gapCenter = lastPipe.topHeight + scaledPipeGap / 2
                     bluePill.current = { x: canvas.width + 40 * scale, y: gapCenter + 20 * scale, rotation: 0 }
@@ -1148,7 +1170,7 @@ const GameEngine = () => {
                 const timeSinceStart = Date.now() - gameStartTime.current
                 const acidRainActive = timeSinceStart > ACID_RAIN_DELAY
 
-                if (acidRainActive) {
+                if (acidRainActive && acidRainEnabled.current) {
                     // Spawn new rain drops (slight diagonal for speed effect)
                     if (Math.random() < 0.3) {
                         rainDrops.current.push({
@@ -1232,6 +1254,57 @@ const GameEngine = () => {
                     ctx.shadowBlur = 10 * scale
                     ctx.font = `bold ${12 * scale}px monospace`
                     ctx.fillText('ACID RAIN', canvas.width - 90 * scale, 30 * scale)
+                    ctx.shadowBlur = 0
+                }
+
+                // === SANDSTORM WEATHER SYSTEM ===
+                const sandstormActive = timeSinceStart > SANDSTORM_DELAY && sandstormEnabled.current
+
+                if (sandstormActive) {
+                    // Yellowish/mustard overlay
+                    ctx.fillStyle = 'rgba(180, 140, 60, 0.15)'
+                    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+                    // Spawn new sand particles (horizontal wind)
+                    if (Math.random() < 0.5) {
+                        sandParticles.current.push({
+                            x: -10 - Math.random() * 50,
+                            y: Math.random() * canvas.height,
+                            speed: (8 + Math.random() * 6) * scale,
+                            size: (2 + Math.random() * 4) * scale,
+                            opacity: 0.3 + Math.random() * 0.5
+                        })
+                    }
+
+                    // Update and draw sand particles
+                    for (let i = sandParticles.current.length - 1; i >= 0; i--) {
+                        const sand = sandParticles.current[i]
+                        sand.x += sand.speed
+                        sand.y += (Math.random() - 0.5) * 2 * scale  // Slight vertical drift
+
+                        // Draw sand particle as elongated streak (goo blown by wind)
+                        ctx.globalAlpha = sand.opacity
+                        ctx.fillStyle = '#c4a84f'
+                        ctx.shadowColor = '#d4b86f'
+                        ctx.shadowBlur = 4 * scale
+                        ctx.beginPath()
+                        ctx.ellipse(sand.x, sand.y, sand.size * 3, sand.size, 0, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.shadowBlur = 0
+                        ctx.globalAlpha = 1
+
+                        // Remove particles that are off screen
+                        if (sand.x > canvas.width + 50) {
+                            sandParticles.current.splice(i, 1)
+                        }
+                    }
+
+                    // Sandstorm warning text
+                    ctx.fillStyle = '#c4a84f'
+                    ctx.shadowColor = '#d4b86f'
+                    ctx.shadowBlur = 10 * scale
+                    ctx.font = `bold ${12 * scale}px monospace`
+                    ctx.fillText('SANDSTORM', canvas.width - 100 * scale, 50 * scale)
                     ctx.shadowBlur = 0
                 }
 
@@ -1432,6 +1505,67 @@ const GameEngine = () => {
             >
                 {isMuted ? '🔇' : '🔊'}
             </button>
+            {/* Dev Mode Panel */}
+            {devModeOpen && (
+                <div style={{
+                    position: 'absolute',
+                    top: 80,
+                    right: 20,
+                    background: 'rgba(0, 0, 0, 0.85)',
+                    border: '2px solid #ff00ff',
+                    borderRadius: 12,
+                    padding: 15,
+                    color: '#fff',
+                    fontSize: 14,
+                    minWidth: 180,
+                    boxShadow: '0 0 20px rgba(255, 0, 255, 0.3)'
+                }}>
+                    <div style={{ color: '#ff00ff', fontWeight: 'bold', marginBottom: 12, fontSize: 16 }}>
+                        🛠️ DEV MODE
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={greenPillsEnabled.current}
+                                onChange={() => { greenPillsEnabled.current = !greenPillsEnabled.current }}
+                                style={{ width: 18, height: 18, accentColor: '#00ff00' }}
+                            />
+                            <span style={{ color: '#00ff00' }}>💊 Green Pills</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={bluePillsEnabled.current}
+                                onChange={() => { bluePillsEnabled.current = !bluePillsEnabled.current }}
+                                style={{ width: 18, height: 18, accentColor: '#4488ff' }}
+                            />
+                            <span style={{ color: '#4488ff' }}>💊 Blue Pills</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={acidRainEnabled.current}
+                                onChange={() => { acidRainEnabled.current = !acidRainEnabled.current }}
+                                style={{ width: 18, height: 18, accentColor: '#88ff00' }}
+                            />
+                            <span style={{ color: '#88ff00' }}>🌧️ Acid Rain</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={sandstormEnabled.current}
+                                onChange={() => { sandstormEnabled.current = !sandstormEnabled.current }}
+                                style={{ width: 18, height: 18, accentColor: '#c4a84f' }}
+                            />
+                            <span style={{ color: '#c4a84f' }}>🏜️ Sandstorm</span>
+                        </label>
+                    </div>
+                    <div style={{ marginTop: 12, color: '#888', fontSize: 11 }}>
+                        Press ` to toggle
+                    </div>
+                </div>
+            )}
             <div style={{ position: 'absolute', bottom: 20, color: '#666', fontSize: '14px' }}>
                 Space or Click to Jump â€¢ Collect green pill for power-up!
             </div>
