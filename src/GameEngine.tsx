@@ -72,9 +72,13 @@ const GameEngine = () => {
     const explosionParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, size: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
-    // Sandstorm weather system
+    // Sandstorm weather system - triggers at 60 points, lasts 12 seconds
     const sandParticles = useRef<{ x: number, y: number, speed: number, size: number, opacity: number }[]>([])
-    const SANDSTORM_DELAY = 30000 // 30 seconds before sandstorm starts
+    const sandstormActiveRef = useRef(false)
+    const sandstormEndTime = useRef(0)
+    const lastSandstormScore = useRef(0)
+    const SANDSTORM_TRIGGER_SCORE = 60
+    const SANDSTORM_DURATION = 12000 // 12 seconds
 
     // Dev mode controls
     const [devModeOpen, setDevModeOpen] = useState(false)
@@ -82,6 +86,7 @@ const GameEngine = () => {
     const bluePillsEnabled = useRef(true)
     const acidRainEnabled = useRef(true)
     const sandstormEnabled = useRef(true)
+    const godMode = useRef(false)
 
     // Villain taunt system - multiple portraits!
     const villainSprites = useRef<HTMLImageElement[]>([])
@@ -343,7 +348,8 @@ const GameEngine = () => {
         const scaledGravity = GRAVITY * scale * mobileSpeedMult
         // Dynamic values based on blue pill status
         const bluePillMult = bluePillActive.current ? BLUE_PILL_SPEED_MULT : 1
-        const scaledPipeSpeed = PIPE_SPEED * scale * bluePillMult * mobileSpeedMult
+        const sandstormMult = sandstormActiveRef.current ? BLUE_PILL_SPEED_MULT : 1  // Same speed as blue pill
+        const scaledPipeSpeed = PIPE_SPEED * scale * bluePillMult * sandstormMult * mobileSpeedMult
         const scaledPipeGap = PIPE_GAP * scale
         const birdSizeMult = bluePillActive.current ? BLUE_PILL_SIZE_MULT : 1
         const scaledBirdSize = 30 * scale * birdSizeMult
@@ -754,6 +760,19 @@ const GameEngine = () => {
                 birdVelocity.current += scaledGravity
                 birdY.current += birdVelocity.current
 
+                // God mode: prevent falling off screen (bounce)
+                if (godMode.current) {
+                    const GROUND_Y_GAME = canvas.height - 20 * scale
+                    if (birdY.current + scaledBirdSize > GROUND_Y_GAME) {
+                        birdY.current = GROUND_Y_GAME - scaledBirdSize
+                        birdVelocity.current = -Math.abs(birdVelocity.current) * 0.5
+                    }
+                    if (birdY.current < 0) {
+                        birdY.current = 0
+                        birdVelocity.current = Math.abs(birdVelocity.current) * 0.5
+                    }
+                }
+
                 // === PILL ===
                 pillSpawnTimer.current++
                 if (!pill.current && pillSpawnTimer.current > 500 && Math.random() < 0.02 && pipes.current.length > 0 && greenPillsEnabled.current) {
@@ -1127,7 +1146,26 @@ const GameEngine = () => {
 
                         if (scaledBirdX < p.x + scaledPipeWidth && scaledBirdX + scaledBirdSize > p.x &&
                             (birdY.current < p.topHeight || birdY.current + scaledBirdSize > p.topHeight + scaledPipeGap)) {
-                            setGameState('GAME_OVER')
+                            if (godMode.current) {
+                                // God mode: explode the building on touch
+                                p.destroyed = true
+                                for (let k = 0; k < 20; k++) {
+                                    const angle = Math.random() * Math.PI * 2
+                                    const speed = (3 + Math.random() * 6) * scale
+                                    explosionParticles.current.push({
+                                        x: p.x + scaledPipeWidth / 2,
+                                        y: birdY.current,
+                                        vx: Math.cos(angle) * speed,
+                                        vy: Math.sin(angle) * speed,
+                                        life: 1,
+                                        size: (5 + Math.random() * 10) * scale,
+                                        color: Math.random() > 0.5 ? '#ff8800' : '#ffcc00'
+                                    })
+                                }
+                                playExplosionSound()
+                            } else {
+                                setGameState('GAME_OVER')
+                            }
                         }
                     } else {
                         // Destroyed debris - floating pieces
@@ -1258,9 +1296,19 @@ const GameEngine = () => {
                 }
 
                 // === SANDSTORM WEATHER SYSTEM ===
-                const sandstormActive = timeSinceStart > SANDSTORM_DELAY && sandstormEnabled.current
+                // Trigger sandstorm at score multiples of 60
+                if (sandstormEnabled.current && score >= SANDSTORM_TRIGGER_SCORE && score % SANDSTORM_TRIGGER_SCORE === 0 && score !== lastSandstormScore.current) {
+                    sandstormActiveRef.current = true
+                    sandstormEndTime.current = Date.now() + SANDSTORM_DURATION
+                    lastSandstormScore.current = score
+                }
+                // Check if sandstorm has expired
+                if (sandstormActiveRef.current && Date.now() > sandstormEndTime.current) {
+                    sandstormActiveRef.current = false
+                    sandParticles.current = []
+                }
 
-                if (sandstormActive) {
+                if (sandstormActiveRef.current) {
                     // Yellowish/mustard overlay
                     ctx.fillStyle = 'rgba(180, 140, 60, 0.15)'
                     ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -1559,6 +1607,16 @@ const GameEngine = () => {
                                 style={{ width: 18, height: 18, accentColor: '#c4a84f' }}
                             />
                             <span style={{ color: '#c4a84f' }}>🏜️ Sandstorm</span>
+                        </label>
+                        <div style={{ borderTop: '1px solid #ff00ff33', margin: '4px 0' }} />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={godMode.current}
+                                onChange={() => { godMode.current = !godMode.current }}
+                                style={{ width: 18, height: 18, accentColor: '#ffd700' }}
+                            />
+                            <span style={{ color: '#ffd700', fontWeight: 'bold' }}>⚡ God Mode</span>
                         </label>
                     </div>
                     <div style={{ marginTop: 12, color: '#888', fontSize: 11 }}>
