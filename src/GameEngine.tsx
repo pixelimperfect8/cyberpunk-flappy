@@ -29,6 +29,23 @@ const GameEngine = () => {
     const [highScores, setHighScores] = useState<number[]>(loadHighScores())
     const scoreSaved = useRef(false)
 
+    // Performance: offscreen canvas for background caching
+    const bgCanvas = useRef<HTMLCanvasElement | null>(null)
+    const bgFrameCounter = useRef(0)
+    const BG_CACHE_INTERVAL = 4 // Re-render background every N frames
+
+    // Performance: shared AudioContext
+    const sharedAudioCtx = useRef<AudioContext | null>(null)
+    const getAudioCtx = useCallback(() => {
+        if (!sharedAudioCtx.current || sharedAudioCtx.current.state === 'closed') {
+            sharedAudioCtx.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+        }
+        return sharedAudioCtx.current
+    }, [])
+
+    // Performance: cache mobile detection
+    const isMobileDevice = useRef('ontouchstart' in window || navigator.maxTouchPoints > 0)
+
     // Game Constants (will be scaled based on canvas size)
     const BASE_HEIGHT = 600
     const getScale = useCallback(() => canvasSize.height / BASE_HEIGHT, [canvasSize.height])
@@ -127,6 +144,19 @@ const GameEngine = () => {
     const sandstormEnabled = useRef(true)
     const godMode = useRef(false)
 
+    // Graphics toggles (dev mode)
+    const showFog = useRef(true)
+    const showBeacons = useRef(true)
+    const showFlyingCars = useRef(true)
+    const showGlow = useRef(true)
+    const showParticles = useRef(true)
+    const showSkyline = useRef(true)
+    const showWeatherFX = useRef(true)
+
+    // Fullscreen & mobile view
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [simulateMobile, setSimulateMobile] = useState(false)
+
     // Villain taunt system - multiple portraits!
     const villainSprites = useRef<HTMLImageElement[]>([])
     const currentVillainIndex = useRef(0)
@@ -189,7 +219,7 @@ const GameEngine = () => {
     const playPillSound = useCallback(() => {
         if (isMuted) return
         try {
-            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+            const ctx = getAudioCtx()
             const osc = ctx.createOscillator()
             const gain = ctx.createGain()
             osc.connect(gain)
@@ -204,12 +234,12 @@ const GameEngine = () => {
         } catch (e) {
             console.log('Could not play pill sound', e)
         }
-    }, [isMuted])
+    }, [isMuted, getAudioCtx])
 
     const playExplosionSound = useCallback(() => {
         if (isMuted) return
         try {
-            const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+            const ctx = getAudioCtx()
             // White noise burst for explosion
             const bufferSize = ctx.sampleRate * 0.2
             const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
@@ -233,21 +263,46 @@ const GameEngine = () => {
         } catch (e) {
             console.log('Could not play explosion sound', e)
         }
-    }, [isMuted])
+    }, [isMuted, getAudioCtx])
 
-    // Resize handler
+    // Resize handler (supports mobile simulation & fullscreen)
     useEffect(() => {
         const handleResize = () => {
+            if (simulateMobile) {
+                // Simulate iPhone SE / small phone dimensions
+                setCanvasSize({ width: 250, height: 375 })
+                isMobileDevice.current = true
+                return
+            }
+            if (document.fullscreenElement) {
+                // Fullscreen: fill entire window
+                setCanvasSize({ width: window.innerWidth, height: window.innerHeight })
+                isMobileDevice.current = false
+                return
+            }
             const vh = window.innerHeight
             const aspectRatio = 400 / 600 // Original aspect ratio
             const newHeight = vh - 40 // Leave some padding
             const newWidth = newHeight * aspectRatio
             setCanvasSize({ width: Math.floor(newWidth), height: Math.floor(newHeight) })
+            isMobileDevice.current = 'ontouchstart' in window || navigator.maxTouchPoints > 0
         }
         handleResize()
         window.addEventListener('resize', handleResize)
-        return () => window.removeEventListener('resize', handleResize)
-    }, [])
+
+        // Fullscreen change listener — also trigger resize
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement)
+            // Need a small delay for the browser to update innerWidth/Height
+            setTimeout(handleResize, 50)
+        }
+        document.addEventListener('fullscreenchange', handleFullscreenChange)
+
+        return () => {
+            window.removeEventListener('resize', handleResize)
+            document.removeEventListener('fullscreenchange', handleFullscreenChange)
+        }
+    }, [simulateMobile])
 
     // Load the Dicky sprite
     useEffect(() => {
@@ -455,8 +510,8 @@ const GameEngine = () => {
         if (!ctx) return
 
         const scale = getScale()
-        // Mobile speed boost - detect touch devices
-        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+        // Mobile speed boost - use cached detection
+        const isMobile = isMobileDevice.current
         const mobileSpeedMult = isMobile ? 1.3 : 1
         const scaledGravity = GRAVITY * scale * mobileSpeedMult
         // Dynamic values based on blue pill status
@@ -486,153 +541,181 @@ const GameEngine = () => {
                 return x - Math.floor(x)
             }
 
-            // --- SKY GRADIENT (Animated - dynamic color shift) ---
-            const timeShift = Math.sin(globalTime * 0.01) * 0.1
-            const skyGrad = ctx.createLinearGradient(0, 0, 0, HORIZON_Y + 150 * scale)
-            skyGrad.addColorStop(0, '#0d0d1a')
-            skyGrad.addColorStop(0.15, `hsl(${240 + Math.sin(globalTime * 0.008) * 10}, 30%, ${8 + timeShift * 3}%)`)
-            skyGrad.addColorStop(0.4, `hsl(${210 + Math.sin(globalTime * 0.006) * 15}, 25%, ${18 + timeShift * 5}%)`)
-            skyGrad.addColorStop(0.7, `hsl(${200 + Math.sin(globalTime * 0.004) * 20}, 20%, ${28 + timeShift * 4}%)`)
-            skyGrad.addColorStop(1, `hsl(${190 + Math.sin(globalTime * 0.003) * 25}, 15%, ${35 + timeShift * 3}%)`)
-            ctx.fillStyle = skyGrad
-            ctx.fillRect(0, 0, W, H)
+            // === CACHED BACKGROUND RENDERING ===
+            // Sky gradient, neon glows, light beams, haze, and fog change very slowly
+            // so we cache them on an offscreen canvas and re-render every N frames
+            const needsBgUpdate = bgFrameCounter.current % BG_CACHE_INTERVAL === 0
 
-            // --- PULSING NEON HORIZON GLOW ---
-            const neonPulse1 = (Math.sin(globalTime * 0.04) + 1) / 2 // 0-1 pulse
-            const neonPulse2 = (Math.sin(globalTime * 0.03 + 1) + 1) / 2
-            const neonPulse3 = (Math.sin(globalTime * 0.025 + 2) + 1) / 2
-
-            // Magenta glow
-            const magentaGlow = ctx.createRadialGradient(
-                W * 0.3, HORIZON_Y + 30 * scale, 0,
-                W * 0.3, HORIZON_Y + 30 * scale, 200 * scale
-            )
-            magentaGlow.addColorStop(0, `rgba(255, 0, 150, ${0.15 + neonPulse1 * 0.15})`)
-            magentaGlow.addColorStop(0.5, `rgba(255, 0, 100, ${0.08 + neonPulse1 * 0.08})`)
-            magentaGlow.addColorStop(1, 'rgba(255, 0, 80, 0)')
-            ctx.fillStyle = magentaGlow
-            ctx.fillRect(0, 0, W, H)
-
-            // Cyan glow
-            const cyanGlow = ctx.createRadialGradient(
-                W * 0.7, HORIZON_Y + 20 * scale, 0,
-                W * 0.7, HORIZON_Y + 20 * scale, 180 * scale
-            )
-            cyanGlow.addColorStop(0, `rgba(0, 255, 255, ${0.12 + neonPulse2 * 0.12})`)
-            cyanGlow.addColorStop(0.5, `rgba(0, 200, 255, ${0.06 + neonPulse2 * 0.06})`)
-            cyanGlow.addColorStop(1, 'rgba(0, 150, 255, 0)')
-            ctx.fillStyle = cyanGlow
-            ctx.fillRect(0, 0, W, H)
-
-            // Purple center glow
-            const purpleGlow = ctx.createRadialGradient(
-                W * 0.5, HORIZON_Y, 0,
-                W * 0.5, HORIZON_Y, 250 * scale
-            )
-            purpleGlow.addColorStop(0, `rgba(150, 50, 255, ${0.1 + neonPulse3 * 0.1})`)
-            purpleGlow.addColorStop(0.6, `rgba(100, 0, 200, ${0.05 + neonPulse3 * 0.05})`)
-            purpleGlow.addColorStop(1, 'rgba(50, 0, 100, 0)')
-            ctx.fillStyle = purpleGlow
-            ctx.fillRect(0, 0, W, H)
-
-            // --- SWEEPING LIGHT BEAMS ---
-            ctx.globalAlpha = 0.03
-            for (let beam = 0; beam < 3; beam++) {
-                const beamAngle = (globalTime * 0.02 + beam * 2) % (Math.PI * 2)
-                const beamX = W * 0.5 + Math.cos(beamAngle) * W * 0.4
-                const beamGrad = ctx.createLinearGradient(beamX, 0, beamX + 100 * scale, HORIZON_Y)
-                beamGrad.addColorStop(0, 'rgba(255, 255, 255, 0)')
-                beamGrad.addColorStop(0.5, `rgba(${beam === 0 ? '255,100,255' : beam === 1 ? '100,255,255' : '255,255,100'}, 1)`)
-                beamGrad.addColorStop(1, 'rgba(255, 255, 255, 0)')
-                ctx.fillStyle = beamGrad
-                ctx.beginPath()
-                ctx.moveTo(beamX - 30 * scale, 0)
-                ctx.lineTo(beamX + 30 * scale, 0)
-                ctx.lineTo(beamX + 80 * scale, HORIZON_Y)
-                ctx.lineTo(beamX - 80 * scale, HORIZON_Y)
-                ctx.closePath()
-                ctx.fill()
+            if (!bgCanvas.current || bgCanvas.current.width !== W || bgCanvas.current.height !== H) {
+                bgCanvas.current = document.createElement('canvas')
+                bgCanvas.current.width = W
+                bgCanvas.current.height = H
             }
-            ctx.globalAlpha = 1
 
-            // --- DISTANT CITY HAZE (atmospheric glow - animated) ---
-            const hazeOffset = Math.sin(globalTime * 0.015) * 30 * scale
-            const hazeGrad = ctx.createRadialGradient(W / 2 + hazeOffset, HORIZON_Y + 50 * scale, 0, W / 2, HORIZON_Y + 50 * scale, W * 0.7)
-            hazeGrad.addColorStop(0, 'rgba(100, 160, 180, 0.3)')
-            hazeGrad.addColorStop(0.3, 'rgba(80, 140, 160, 0.2)')
-            hazeGrad.addColorStop(0.6, 'rgba(60, 100, 120, 0.1)')
-            hazeGrad.addColorStop(1, 'rgba(30, 40, 50, 0)')
-            ctx.fillStyle = hazeGrad
-            ctx.fillRect(0, 0, W, H)
+            if (needsBgUpdate) {
+                const bgCtx = bgCanvas.current.getContext('2d')!
 
-            // --- DRIFTING FOG LAYERS (multiple wispy layers) ---
-            const drawFogLayer = (yBase: number, speed: number, alpha: number, fogScale: number) => {
-                ctx.globalAlpha = alpha
-                const fogOffset = (globalTime * speed) % (W * 2)
+                // --- SKY GRADIENT (Animated - dynamic color shift) ---
+                const timeShift = Math.sin(globalTime * 0.01) * 0.1
+                const skyGrad = bgCtx.createLinearGradient(0, 0, 0, HORIZON_Y + 150 * scale)
+                skyGrad.addColorStop(0, '#0d0d1a')
+                skyGrad.addColorStop(0.15, `hsl(${240 + Math.sin(globalTime * 0.008) * 10}, 30%, ${8 + timeShift * 3}%)`)
+                skyGrad.addColorStop(0.4, `hsl(${210 + Math.sin(globalTime * 0.006) * 15}, 25%, ${18 + timeShift * 5}%)`)
+                skyGrad.addColorStop(0.7, `hsl(${200 + Math.sin(globalTime * 0.004) * 20}, 20%, ${28 + timeShift * 4}%)`)
+                skyGrad.addColorStop(1, `hsl(${190 + Math.sin(globalTime * 0.003) * 25}, 15%, ${35 + timeShift * 3}%)`)
+                bgCtx.fillStyle = skyGrad
+                bgCtx.fillRect(0, 0, W, H)
 
-                for (let fx = -W; fx < W * 2; fx += 60 * fogScale * scale) {
-                    const fogY = yBase + Math.sin((fx + fogOffset) * 0.01) * 15 * scale
-                    const fogW = (80 + Math.sin(fx * 0.02) * 30) * scale
-                    const fogH = (8 + Math.sin(fx * 0.03) * 4) * scale
+                // --- PULSING NEON HORIZON GLOW ---
+                const neonPulse1 = (Math.sin(globalTime * 0.04) + 1) / 2
+                const neonPulse2 = (Math.sin(globalTime * 0.03 + 1) + 1) / 2
+                const neonPulse3 = (Math.sin(globalTime * 0.025 + 2) + 1) / 2
 
-                    const fogGrad = ctx.createRadialGradient(
-                        fx - fogOffset + fogW / 2, fogY, 0,
-                        fx - fogOffset + fogW / 2, fogY, fogW / 2
-                    )
-                    fogGrad.addColorStop(0, 'rgba(120, 140, 150, 0.4)')
-                    fogGrad.addColorStop(0.5, 'rgba(100, 120, 130, 0.2)')
-                    fogGrad.addColorStop(1, 'rgba(80, 100, 110, 0)')
+                // Magenta glow
+                const magentaGlow = bgCtx.createRadialGradient(
+                    W * 0.3, HORIZON_Y + 30 * scale, 0,
+                    W * 0.3, HORIZON_Y + 30 * scale, 200 * scale
+                )
+                magentaGlow.addColorStop(0, `rgba(255, 0, 150, ${0.15 + neonPulse1 * 0.15})`)
+                magentaGlow.addColorStop(0.5, `rgba(255, 0, 100, ${0.08 + neonPulse1 * 0.08})`)
+                magentaGlow.addColorStop(1, 'rgba(255, 0, 80, 0)')
+                bgCtx.fillStyle = magentaGlow
+                bgCtx.fillRect(0, 0, W, H)
 
-                    ctx.fillStyle = fogGrad
-                    ctx.beginPath()
-                    ctx.ellipse(fx - fogOffset + fogW / 2, fogY, fogW * fogScale, fogH * fogScale, 0, 0, Math.PI * 2)
-                    ctx.fill()
+                // Cyan glow
+                const cyanGlow = bgCtx.createRadialGradient(
+                    W * 0.7, HORIZON_Y + 20 * scale, 0,
+                    W * 0.7, HORIZON_Y + 20 * scale, 180 * scale
+                )
+                cyanGlow.addColorStop(0, `rgba(0, 255, 255, ${0.12 + neonPulse2 * 0.12})`)
+                cyanGlow.addColorStop(0.5, `rgba(0, 200, 255, ${0.06 + neonPulse2 * 0.06})`)
+                cyanGlow.addColorStop(1, 'rgba(0, 150, 255, 0)')
+                bgCtx.fillStyle = cyanGlow
+                bgCtx.fillRect(0, 0, W, H)
+
+                // Purple center glow
+                const purpleGlow = bgCtx.createRadialGradient(
+                    W * 0.5, HORIZON_Y, 0,
+                    W * 0.5, HORIZON_Y, 250 * scale
+                )
+                purpleGlow.addColorStop(0, `rgba(150, 50, 255, ${0.1 + neonPulse3 * 0.1})`)
+                purpleGlow.addColorStop(0.6, `rgba(100, 0, 200, ${0.05 + neonPulse3 * 0.05})`)
+                purpleGlow.addColorStop(1, 'rgba(50, 0, 100, 0)')
+                bgCtx.fillStyle = purpleGlow
+                bgCtx.fillRect(0, 0, W, H)
+
+                // --- SWEEPING LIGHT BEAMS ---
+                bgCtx.globalAlpha = 0.03
+                for (let beam = 0; beam < 3; beam++) {
+                    const beamAngle = (globalTime * 0.02 + beam * 2) % (Math.PI * 2)
+                    const beamX = W * 0.5 + Math.cos(beamAngle) * W * 0.4
+                    const beamGrad = bgCtx.createLinearGradient(beamX, 0, beamX + 100 * scale, HORIZON_Y)
+                    beamGrad.addColorStop(0, 'rgba(255, 255, 255, 0)')
+                    beamGrad.addColorStop(0.5, `rgba(${beam === 0 ? '255,100,255' : beam === 1 ? '100,255,255' : '255,255,100'}, 1)`)
+                    beamGrad.addColorStop(1, 'rgba(255, 255, 255, 0)')
+                    bgCtx.fillStyle = beamGrad
+                    bgCtx.beginPath()
+                    bgCtx.moveTo(beamX - 30 * scale, 0)
+                    bgCtx.lineTo(beamX + 30 * scale, 0)
+                    bgCtx.lineTo(beamX + 80 * scale, HORIZON_Y)
+                    bgCtx.lineTo(beamX - 80 * scale, HORIZON_Y)
+                    bgCtx.closePath()
+                    bgCtx.fill()
                 }
-                ctx.globalAlpha = 1
-            }
+                bgCtx.globalAlpha = 1
 
-            drawFogLayer(HORIZON_Y - 30 * scale, 0.3, 0.15, 1.5)
-            drawFogLayer(HORIZON_Y + 20 * scale, 0.5, 0.12, 1.2)
-            drawFogLayer(HORIZON_Y + 80 * scale, 0.8, 0.08, 1.0)
+                // --- DISTANT CITY HAZE (atmospheric glow - animated) ---
+                const hazeOffset = Math.sin(globalTime * 0.015) * 30 * scale
+                const hazeGrad = bgCtx.createRadialGradient(W / 2 + hazeOffset, HORIZON_Y + 50 * scale, 0, W / 2, HORIZON_Y + 50 * scale, W * 0.7)
+                hazeGrad.addColorStop(0, 'rgba(100, 160, 180, 0.3)')
+                hazeGrad.addColorStop(0.3, 'rgba(80, 140, 160, 0.2)')
+                hazeGrad.addColorStop(0.6, 'rgba(60, 100, 120, 0.1)')
+                hazeGrad.addColorStop(1, 'rgba(30, 40, 50, 0)')
+                bgCtx.fillStyle = hazeGrad
+                bgCtx.fillRect(0, 0, W, H)
+
+                // --- DRIFTING FOG LAYERS (per-ellipse radial gradients for soft edges) ---
+                const drawFogLayer = (yBase: number, speed: number, alpha: number, fogScale: number) => {
+                    const fogOffset = (globalTime * speed) % (W * 2)
+
+                    for (let fx = -W; fx < W * 2; fx += 60 * fogScale * scale) {
+                        const fogY = yBase + Math.sin((fx + fogOffset) * 0.01) * 15 * scale
+                        const fogW = (80 + Math.sin(fx * 0.02) * 30) * scale
+                        const fogH = (8 + Math.sin(fx * 0.03) * 4) * scale
+
+                        const cx = fx - fogOffset + fogW / 2
+                        const rW = fogW * fogScale
+                        const rH = fogH * fogScale
+
+                        // Per-ellipse radial gradient for soft, natural fog
+                        bgCtx.save()
+                        bgCtx.globalAlpha = alpha
+                        bgCtx.translate(cx, fogY)
+                        bgCtx.scale(rW / rH, 1)
+                        const grad = bgCtx.createRadialGradient(0, 0, 0, 0, 0, rH)
+                        grad.addColorStop(0, 'rgba(120, 140, 160, 0.6)')
+                        grad.addColorStop(0.5, 'rgba(100, 120, 140, 0.3)')
+                        grad.addColorStop(1, 'rgba(80, 100, 120, 0)')
+                        bgCtx.fillStyle = grad
+                        bgCtx.beginPath()
+                        bgCtx.arc(0, 0, rH, 0, Math.PI * 2)
+                        bgCtx.fill()
+                        bgCtx.restore()
+                    }
+                    bgCtx.globalAlpha = 1
+                }
+
+                if (showFog.current) {
+                    drawFogLayer(HORIZON_Y - 30 * scale, 0.3, 0.15, 1.5)
+                    drawFogLayer(HORIZON_Y + 20 * scale, 0.5, 0.12, 1.2)
+                    drawFogLayer(HORIZON_Y + 80 * scale, 0.8, 0.08, 1.0)
+                }
+            }
+            bgFrameCounter.current++
+
+            // Draw cached background to main canvas
+            ctx.drawImage(bgCanvas.current, 0, 0)
 
 
 
             // === PARALLAX SKYLINE BACKGROUNDS ===
-            const skyScrollSpeed = scaledPipeSpeed * 0.3
+            if (showSkyline.current) {
+                const skyScrollSpeed = scaledPipeSpeed * 0.3
 
-            // Choose skyline based on score level
-            const useLevel2 = score >= LEVEL_2_SCORE
-            const activeBack = useLevel2 && skylineBack2.current ? skylineBack2.current : skylineBack.current
-            const activeFront = useLevel2 && skylineFront2.current ? skylineFront2.current : skylineFront.current
+                // Choose skyline based on score level
+                const useLevel2 = score >= LEVEL_2_SCORE
+                const activeBack = useLevel2 && skylineBack2.current ? skylineBack2.current : skylineBack.current
+                const activeFront = useLevel2 && skylineFront2.current ? skylineFront2.current : skylineFront.current
 
-            // Draw back skyline (slower, distant)
-            if (activeBack) {
-                skylineBackX.current -= skyScrollSpeed * 0.3
-                const backH = GROUND_Y - HORIZON_Y + 50 * scale
-                const backW = activeBack.width * (backH / activeBack.height)
-                if (skylineBackX.current <= -backW) skylineBackX.current = 0
-                ctx.globalAlpha = 0.7
-                ctx.drawImage(activeBack, skylineBackX.current, HORIZON_Y - 50 * scale, backW, backH)
-                ctx.drawImage(activeBack, skylineBackX.current + backW, HORIZON_Y - 50 * scale, backW, backH)
-                ctx.globalAlpha = 1
-            }
+                // Draw back skyline (slower, distant)
+                if (activeBack) {
+                    skylineBackX.current -= skyScrollSpeed * 0.3
+                    const backH = GROUND_Y - HORIZON_Y + 50 * scale
+                    const backW = activeBack.width * (backH / activeBack.height)
+                    if (skylineBackX.current <= -backW) skylineBackX.current = 0
+                    ctx.globalAlpha = 0.7
+                    ctx.drawImage(activeBack, skylineBackX.current, HORIZON_Y - 50 * scale, backW, backH)
+                    ctx.drawImage(activeBack, skylineBackX.current + backW, HORIZON_Y - 50 * scale, backW, backH)
+                    ctx.globalAlpha = 1
+                }
 
-            // Draw front skyline (faster, closer)
-            if (activeFront) {
-                skylineFrontX.current -= skyScrollSpeed * 0.6
-                const frontH = GROUND_Y - HORIZON_Y + 80 * scale
-                const frontW = activeFront.width * (frontH / activeFront.height)
-                if (skylineFrontX.current <= -frontW) skylineFrontX.current = 0
-                ctx.drawImage(activeFront, skylineFrontX.current, HORIZON_Y - 80 * scale, frontW, frontH)
-                ctx.drawImage(activeFront, skylineFrontX.current + frontW, HORIZON_Y - 80 * scale, frontW, frontH)
-            }
+                // Draw front skyline (faster, closer)
+                if (activeFront) {
+                    skylineFrontX.current -= skyScrollSpeed * 0.6
+                    const frontH = GROUND_Y - HORIZON_Y + 80 * scale
+                    const frontW = activeFront.width * (frontH / activeFront.height)
+                    if (skylineFrontX.current <= -frontW) skylineFrontX.current = 0
+                    ctx.drawImage(activeFront, skylineFrontX.current, HORIZON_Y - 80 * scale, frontW, frontH)
+                    ctx.drawImage(activeFront, skylineFrontX.current + frontW, HORIZON_Y - 80 * scale, frontW, frontH)
+                }
 
-            // Persistent yellow overlay for level 2 (score 150-300)
-            if (score >= LEVEL_2_SCORE && score < LEVEL_2_OVERLAY_END) {
-                ctx.fillStyle = 'rgba(180, 140, 60, 0.08)'
-                ctx.fillRect(0, 0, canvas.width, canvas.height)
-            }
+                // Persistent yellow overlay for level 2 (score 150-300)
+                if (score >= LEVEL_2_SCORE && score < LEVEL_2_OVERLAY_END) {
+                    ctx.fillStyle = 'rgba(180, 140, 60, 0.08)'
+                    ctx.fillRect(0, 0, canvas.width, canvas.height)
+                }
 
+            } // end showSkyline
 
             // === BRIDGES ===
             const bridges = [
@@ -656,24 +739,26 @@ const GameEngine = () => {
             })
 
             // === FLYING VEHICLES ===
-            const drawFlyingCar = (x: number, y: number, dir: number, size: number) => {
-                const w = 20 * size * scale
-                const h = 6 * size * scale
-                ctx.fillStyle = '#2a2a4a'
-                ctx.fillRect(x, y, w * dir, h)
-                ctx.fillStyle = '#ff4444'
-                ctx.fillRect(x + (dir > 0 ? scale : w - 3 * scale), y + h / 2 - 2 * scale, 3 * scale, 4 * scale)
-                ctx.fillStyle = '#ffffcc'
-                ctx.shadowColor = '#ffffcc'
-                ctx.shadowBlur = 4 * scale
-                ctx.fillRect(x + (dir > 0 ? w - 4 * scale : scale), y + h / 2 - scale, 3 * scale, 2 * scale)
-                ctx.shadowBlur = 0
-            }
+            if (showFlyingCars.current) {
+                const drawFlyingCar = (x: number, y: number, dir: number, size: number) => {
+                    const w = 20 * size * scale
+                    const h = 6 * size * scale
+                    ctx.fillStyle = '#2a2a4a'
+                    ctx.fillRect(x, y, w * dir, h)
+                    ctx.fillStyle = '#ff4444'
+                    ctx.fillRect(x + (dir > 0 ? scale : w - 3 * scale), y + h / 2 - 2 * scale, 3 * scale, 4 * scale)
+                    ctx.fillStyle = '#ffffcc'
+                    ctx.shadowColor = '#ffffcc'
+                    ctx.shadowBlur = 4 * scale
+                    ctx.fillRect(x + (dir > 0 ? w - 4 * scale : scale), y + h / 2 - scale, 3 * scale, 2 * scale)
+                    ctx.shadowBlur = 0
+                }
 
-            drawFlyingCar((globalTime * 1.5) % (W + 60 * scale) - 30 * scale, 85 * scale, 1, 0.8)
-            drawFlyingCar(W - (globalTime * 2) % (W + 60 * scale), 140 * scale, -1, 1)
-            drawFlyingCar((globalTime * 1 + 150) % (W + 60 * scale) - 30 * scale, 200 * scale, 1, 1.2)
-            drawFlyingCar(W - (globalTime * 0.8 + 80) % (W + 60 * scale), 260 * scale, -1, 0.7)
+                drawFlyingCar((globalTime * 1.5) % (W + 60 * scale) - 30 * scale, 85 * scale, 1, 0.8)
+                drawFlyingCar(W - (globalTime * 2) % (W + 60 * scale), 140 * scale, -1, 1)
+                drawFlyingCar((globalTime * 1 + 150) % (W + 60 * scale) - 30 * scale, 200 * scale, 1, 1.2)
+                drawFlyingCar(W - (globalTime * 0.8 + 80) % (W + 60 * scale), 260 * scale, -1, 0.7)
+            } // end showFlyingCars
 
             // === RAILCART ANIMATION (runs on top teal bridge line) ===
             const TOP_RAIL_Y = GROUND_Y - 180 * scale // Top teal bridge position
@@ -733,68 +818,78 @@ const GameEngine = () => {
             }
 
             // === BEACON LIGHTS ===
-            const beaconPositions = [
-                { x: 95 * scale, y: GROUND_Y - 340 * scale },
-                { x: 230 * scale, y: GROUND_Y - 420 * scale },
-                { x: 350 * scale, y: GROUND_Y - 310 * scale },
-            ]
+            if (showBeacons.current) {
+                const beaconPositions = [
+                    { x: 95 * scale, y: GROUND_Y - 340 * scale },
+                    { x: 230 * scale, y: GROUND_Y - 420 * scale },
+                    { x: 350 * scale, y: GROUND_Y - 310 * scale },
+                ]
 
-            beaconPositions.forEach((beacon, idx) => {
-                const beaconAngle = (globalTime * 0.03 + idx * 2.1) % (Math.PI * 2)
+                beaconPositions.forEach((beacon, idx) => {
+                    const beaconAngle = (globalTime * 0.03 + idx * 2.1) % (Math.PI * 2)
 
-                ctx.fillStyle = '#ff0000'
-                ctx.shadowColor = '#ff0000'
-                ctx.shadowBlur = 10 * scale
-                ctx.beginPath()
-                ctx.arc(beacon.x, beacon.y, 4 * scale, 0, Math.PI * 2)
-                ctx.fill()
-                ctx.shadowBlur = 0
+                    ctx.fillStyle = '#ff0000'
+                    ctx.shadowColor = '#ff0000'
+                    ctx.shadowBlur = 10 * scale
+                    ctx.beginPath()
+                    ctx.arc(beacon.x, beacon.y, 4 * scale, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.shadowBlur = 0
 
-                const beamLength = 150 * scale
-                const beamWidth = 0.25
+                    const beamLength = 150 * scale
+                    const beamWidth = 0.25
 
-                const beamGrad = ctx.createRadialGradient(beacon.x, beacon.y, 0, beacon.x, beacon.y, beamLength)
-                beamGrad.addColorStop(0, 'rgba(255, 50, 50, 0.4)')
-                beamGrad.addColorStop(0.3, 'rgba(255, 30, 30, 0.2)')
-                beamGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
+                    const beamGrad = ctx.createRadialGradient(beacon.x, beacon.y, 0, beacon.x, beacon.y, beamLength)
+                    beamGrad.addColorStop(0, 'rgba(255, 50, 50, 0.4)')
+                    beamGrad.addColorStop(0.3, 'rgba(255, 30, 30, 0.2)')
+                    beamGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
 
-                ctx.fillStyle = beamGrad
-                ctx.beginPath()
-                ctx.moveTo(beacon.x, beacon.y)
-                ctx.lineTo(beacon.x + Math.cos(beaconAngle - beamWidth) * beamLength, beacon.y + Math.sin(beaconAngle - beamWidth) * beamLength)
-                ctx.lineTo(beacon.x + Math.cos(beaconAngle + beamWidth) * beamLength, beacon.y + Math.sin(beaconAngle + beamWidth) * beamLength)
-                ctx.closePath()
-                ctx.fill()
-            })
+                    ctx.fillStyle = beamGrad
+                    ctx.beginPath()
+                    ctx.moveTo(beacon.x, beacon.y)
+                    ctx.lineTo(beacon.x + Math.cos(beaconAngle - beamWidth) * beamLength, beacon.y + Math.sin(beaconAngle - beamWidth) * beamLength)
+                    ctx.lineTo(beacon.x + Math.cos(beaconAngle + beamWidth) * beamLength, beacon.y + Math.sin(beaconAngle + beamWidth) * beamLength)
+                    ctx.closePath()
+                    ctx.fill()
+                })
+            } // end showBeacons
 
-            // === FOREGROUND FOG ===
-            const fgFogOffset = (globalTime * 0.4) % (W * 1.5)
-            ctx.globalAlpha = 0.25
+            // === FOREGROUND FOG (per-ellipse radial gradients for soft edges) ===
+            if (showFog.current) {
+                const fgFogOffset = (globalTime * 0.4) % (W * 1.5)
 
-            for (let fx = -100 * scale; fx < W + 200 * scale; fx += 40 * scale) {
-                const fogY = GROUND_Y - 30 * scale + Math.sin((fx + fgFogOffset) * 0.015) * 12 * scale
-                const fogW = (70 + Math.sin(fx * 0.03 + globalTime * 0.01) * 25) * scale
-                const fogH = (18 + Math.sin(fx * 0.02) * 6) * scale
+                for (let fx = -100 * scale; fx < W + 200 * scale; fx += 40 * scale) {
+                    const fogY = GROUND_Y - 30 * scale + Math.sin((fx + fgFogOffset) * 0.015) * 12 * scale
+                    const fogW = (70 + Math.sin(fx * 0.03 + globalTime * 0.01) * 25) * scale
+                    const fogH = (18 + Math.sin(fx * 0.02) * 6) * scale
 
-                const fgFogGrad = ctx.createRadialGradient(fx - fgFogOffset + fogW / 2, fogY, 0, fx - fgFogOffset + fogW / 2, fogY, fogW / 1.5)
-                fgFogGrad.addColorStop(0, 'rgba(80, 100, 120, 0.5)')
-                fgFogGrad.addColorStop(0.4, 'rgba(60, 80, 100, 0.3)')
-                fgFogGrad.addColorStop(1, 'rgba(40, 60, 80, 0)')
+                    const cx = fx - fgFogOffset + fogW / 2
 
-                ctx.fillStyle = fgFogGrad
-                ctx.beginPath()
-                ctx.ellipse(fx - fgFogOffset + fogW / 2, fogY, fogW, fogH, 0, 0, Math.PI * 2)
-                ctx.fill()
-            }
+                    // Per-ellipse radial gradient for natural fog glow
+                    ctx.save()
+                    ctx.globalAlpha = 0.2
+                    ctx.translate(cx, fogY)
+                    ctx.scale(fogW / fogH, 1)
+                    const fogGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, fogH)
+                    fogGrad.addColorStop(0, 'rgba(80, 110, 140, 0.7)')
+                    fogGrad.addColorStop(0.5, 'rgba(60, 90, 120, 0.35)')
+                    fogGrad.addColorStop(1, 'rgba(50, 70, 100, 0)')
+                    ctx.fillStyle = fogGrad
+                    ctx.beginPath()
+                    ctx.arc(0, 0, fogH, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.restore()
+                }
 
-            const groundFogGrad = ctx.createLinearGradient(0, GROUND_Y - 50 * scale, 0, GROUND_Y + 10 * scale)
-            groundFogGrad.addColorStop(0, 'rgba(60, 80, 100, 0)')
-            groundFogGrad.addColorStop(0.5, 'rgba(70, 90, 110, 0.25)')
-            groundFogGrad.addColorStop(1, 'rgba(80, 100, 120, 0.4)')
-            ctx.fillStyle = groundFogGrad
-            ctx.fillRect(0, GROUND_Y - 50 * scale, W, 60 * scale)
+                const groundFogGrad = ctx.createLinearGradient(0, GROUND_Y - 50 * scale, 0, GROUND_Y + 10 * scale)
+                groundFogGrad.addColorStop(0, 'rgba(60, 80, 100, 0)')
+                groundFogGrad.addColorStop(0.5, 'rgba(70, 90, 110, 0.25)')
+                groundFogGrad.addColorStop(1, 'rgba(80, 100, 120, 0.4)')
+                ctx.fillStyle = groundFogGrad
+                ctx.fillRect(0, GROUND_Y - 50 * scale, W, 60 * scale)
 
-            ctx.globalAlpha = 1
+                ctx.globalAlpha = 1
+            } // end showFog foreground
 
             // Draw Bird (Flappy Dicky sprite with rotation)
             ctx.save()
@@ -1109,8 +1204,15 @@ const GameEngine = () => {
                     proj.x += 8 * scale
                     if (proj.vy) proj.y += proj.vy  // Spread shot vertical movement
 
-                    ctx.shadowColor = '#ffffff'
-                    ctx.shadowBlur = 10 * scale
+                    // Manual glow: larger semi-transparent circle behind projectile
+                    if (showGlow.current) {
+                        ctx.globalAlpha = 0.3
+                        ctx.fillStyle = '#ffffff'
+                        ctx.beginPath()
+                        ctx.arc(proj.x + 6 * scale, proj.y, 10 * scale, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = 1
+                    }
                     ctx.fillStyle = '#ffffff'
                     ctx.beginPath()
                     ctx.moveTo(proj.x + 12 * scale, proj.y)
@@ -1121,7 +1223,6 @@ const GameEngine = () => {
                     ctx.beginPath()
                     ctx.arc(proj.x + 4 * scale, proj.y, 3 * scale, 0, Math.PI * 2)
                     ctx.fill()
-                    ctx.shadowBlur = 0
 
                     for (let j = pipes.current.length - 1; j >= 0; j--) {
                         const p = pipes.current[j]
@@ -1184,15 +1285,20 @@ const GameEngine = () => {
 
                     if (p.life <= 0) {
                         explosionParticles.current.splice(i, 1)
-                    } else {
+                    } else if (showParticles.current) {
+                        // Manual glow: larger faded circle behind particle
+                        if (showGlow.current) {
+                            ctx.globalAlpha = p.life * 0.3
+                            ctx.fillStyle = p.color
+                            ctx.beginPath()
+                            ctx.arc(p.x, p.y, p.size * p.life * 2.5, 0, Math.PI * 2)
+                            ctx.fill()
+                        }
                         ctx.globalAlpha = p.life
-                        ctx.shadowColor = p.color
-                        ctx.shadowBlur = 10 * scale
                         ctx.fillStyle = p.color
                         ctx.beginPath()
                         ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2)
                         ctx.fill()
-                        ctx.shadowBlur = 0
                         ctx.globalAlpha = 1
                     }
                 }
@@ -1419,16 +1525,22 @@ const GameEngine = () => {
                         drop.y += drop.speed
                         drop.x += drop.vx  // Move diagonally
 
-                        // Draw acid rain drop with glow (diagonal line)
-                        ctx.strokeStyle = '#88ff00'
-                        ctx.shadowColor = '#88ff00'
-                        ctx.shadowBlur = 4 * scale
-                        ctx.lineWidth = 2 * scale
-                        ctx.beginPath()
-                        ctx.moveTo(drop.x, drop.y)
-                        ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)  // Angled line
-                        ctx.stroke()
-                        ctx.shadowBlur = 0
+                        // Draw acid rain drop with glow (wider faded stroke behind)
+                        if (showWeatherFX.current) {
+                            ctx.globalAlpha = 0.3
+                            ctx.strokeStyle = '#88ff00'
+                            ctx.lineWidth = 6 * scale
+                            ctx.beginPath()
+                            ctx.moveTo(drop.x, drop.y)
+                            ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)
+                            ctx.stroke()
+                            ctx.globalAlpha = 1
+                            ctx.lineWidth = 2 * scale
+                            ctx.beginPath()
+                            ctx.moveTo(drop.x, drop.y)
+                            ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)
+                            ctx.stroke()
+                        }
 
                         // Check collision with bird
                         if (drop.x > scaledBirdX && drop.x < scaledBirdX + scaledBirdSize &&
@@ -1464,14 +1576,16 @@ const GameEngine = () => {
                         p.vy += 0.2 * scale
                         p.life--
 
-                        ctx.globalAlpha = p.life / 30
+                        // Manual glow: larger faded circle behind splash
+                        ctx.globalAlpha = (p.life / 30) * 0.3
                         ctx.fillStyle = p.color
-                        ctx.shadowColor = p.color
-                        ctx.shadowBlur = 6 * scale
+                        ctx.beginPath()
+                        ctx.arc(p.x, p.y, 7 * scale, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = p.life / 30
                         ctx.beginPath()
                         ctx.arc(p.x, p.y, 3 * scale, 0, Math.PI * 2)
                         ctx.fill()
-                        ctx.shadowBlur = 0
                         ctx.globalAlpha = 1
 
                         if (p.life <= 0) {
@@ -1494,15 +1608,20 @@ const GameEngine = () => {
                         const drop = rainDrops.current[i]
                         drop.y += drop.speed
                         drop.x += drop.vx
+                        // Faded wider stroke for glow effect
+                        ctx.globalAlpha = 0.3
                         ctx.strokeStyle = '#88ff00'
-                        ctx.shadowColor = '#88ff00'
-                        ctx.shadowBlur = 4 * scale
+                        ctx.lineWidth = 6 * scale
+                        ctx.beginPath()
+                        ctx.moveTo(drop.x, drop.y)
+                        ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)
+                        ctx.stroke()
+                        ctx.globalAlpha = 1
                         ctx.lineWidth = 2 * scale
                         ctx.beginPath()
                         ctx.moveTo(drop.x, drop.y)
                         ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)
                         ctx.stroke()
-                        ctx.shadowBlur = 0
                         if (drop.y > canvas.height || drop.x < -50) {
                             rainDrops.current.splice(i, 1)
                         }
@@ -1587,15 +1706,21 @@ const GameEngine = () => {
                         sand.y += (Math.random() - 0.5) * 2 * scale  // Slight vertical drift
 
                         // Draw sand particle as elongated streak (goo blown by wind)
-                        ctx.globalAlpha = sand.opacity
-                        ctx.fillStyle = '#c4a84f'
-                        ctx.shadowColor = '#d4b86f'
-                        ctx.shadowBlur = 4 * scale
-                        ctx.beginPath()
-                        ctx.ellipse(sand.x, sand.y, sand.size * 3, sand.size, 0, 0, Math.PI * 2)
-                        ctx.fill()
-                        ctx.shadowBlur = 0
-                        ctx.globalAlpha = 1
+                        if (showWeatherFX.current) {
+                            ctx.globalAlpha = sand.opacity
+                            // Manual glow: larger faded ellipse behind sand particle
+                            ctx.fillStyle = '#d4b86f'
+                            ctx.globalAlpha = sand.opacity * 0.3
+                            ctx.beginPath()
+                            ctx.ellipse(sand.x, sand.y, sand.size * 5, sand.size * 2, 0, 0, Math.PI * 2)
+                            ctx.fill()
+                            ctx.globalAlpha = sand.opacity
+                            ctx.fillStyle = '#c4a84f'
+                            ctx.beginPath()
+                            ctx.ellipse(sand.x, sand.y, sand.size * 3, sand.size, 0, 0, Math.PI * 2)
+                            ctx.fill()
+                            ctx.globalAlpha = 1
+                        }
 
                         // Remove particles that are off screen
                         if (sand.x > canvas.width + 50) {
@@ -2049,9 +2174,9 @@ const GameEngine = () => {
                 width={canvasSize.width}
                 height={canvasSize.height}
                 style={{
-                    border: '2px solid #00ffff',
-                    borderRadius: '8px',
-                    boxShadow: '0 0 30px rgba(0, 255, 255, 0.3)'
+                    border: isFullscreen ? 'none' : '2px solid #00ffff',
+                    borderRadius: isFullscreen ? '0' : '8px',
+                    boxShadow: isFullscreen ? 'none' : '0 0 30px rgba(0, 255, 255, 0.3)'
                 }}
             />
             <div style={{ position: 'absolute', top: 20, color: '#00ffff', fontSize: `${28 * (canvasSize.height / 600)}px`, fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>
@@ -2086,67 +2211,125 @@ const GameEngine = () => {
                     position: 'absolute',
                     top: 80,
                     right: 20,
-                    background: 'rgba(0, 0, 0, 0.85)',
+                    background: 'rgba(0, 0, 0, 0.9)',
                     border: '2px solid #ff00ff',
                     borderRadius: 12,
                     padding: 15,
                     color: '#fff',
-                    fontSize: 14,
-                    minWidth: 180,
-                    boxShadow: '0 0 20px rgba(255, 0, 255, 0.3)'
+                    fontSize: 13,
+                    minWidth: 200,
+                    maxHeight: 'calc(100vh - 120px)',
+                    overflowY: 'auto',
+                    boxShadow: '0 0 20px rgba(255, 0, 255, 0.3)',
+                    zIndex: 100
                 }}>
-                    <div style={{ color: '#ff00ff', fontWeight: 'bold', marginBottom: 12, fontSize: 16 }}>
+                    <div style={{ color: '#ff00ff', fontWeight: 'bold', marginBottom: 10, fontSize: 15 }}>
                         🛠️ DEV MODE
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+                    {/* === GAMEPLAY === */}
+                    <div style={{ color: '#ff00ff88', fontSize: 10, fontWeight: 'bold', marginBottom: 6, letterSpacing: 1 }}>GAMEPLAY</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={greenPillsEnabled.current}
-                                onChange={() => { greenPillsEnabled.current = !greenPillsEnabled.current }}
-                                style={{ width: 18, height: 18, accentColor: '#00ff00' }}
-                            />
+                            <input type="checkbox" checked={greenPillsEnabled.current} onChange={() => { greenPillsEnabled.current = !greenPillsEnabled.current }} style={{ width: 16, height: 16, accentColor: '#00ff00' }} />
                             <span style={{ color: '#00ff00' }}>💊 Green Pills</span>
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={bluePillsEnabled.current}
-                                onChange={() => { bluePillsEnabled.current = !bluePillsEnabled.current }}
-                                style={{ width: 18, height: 18, accentColor: '#4488ff' }}
-                            />
+                            <input type="checkbox" checked={bluePillsEnabled.current} onChange={() => { bluePillsEnabled.current = !bluePillsEnabled.current }} style={{ width: 16, height: 16, accentColor: '#4488ff' }} />
                             <span style={{ color: '#4488ff' }}>💊 Blue Pills</span>
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={acidRainEnabled.current}
-                                onChange={() => { acidRainEnabled.current = !acidRainEnabled.current }}
-                                style={{ width: 18, height: 18, accentColor: '#88ff00' }}
-                            />
+                            <input type="checkbox" checked={acidRainEnabled.current} onChange={() => { acidRainEnabled.current = !acidRainEnabled.current }} style={{ width: 16, height: 16, accentColor: '#88ff00' }} />
                             <span style={{ color: '#88ff00' }}>🌧️ Acid Rain</span>
                         </label>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={sandstormEnabled.current}
-                                onChange={() => { sandstormEnabled.current = !sandstormEnabled.current }}
-                                style={{ width: 18, height: 18, accentColor: '#c4a84f' }}
-                            />
+                            <input type="checkbox" checked={sandstormEnabled.current} onChange={() => { sandstormEnabled.current = !sandstormEnabled.current }} style={{ width: 16, height: 16, accentColor: '#c4a84f' }} />
                             <span style={{ color: '#c4a84f' }}>🏜️ Sandstorm</span>
                         </label>
-                        <div style={{ borderTop: '1px solid #ff00ff33', margin: '4px 0' }} />
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={godMode.current}
-                                onChange={() => { godMode.current = !godMode.current }}
-                                style={{ width: 18, height: 18, accentColor: '#ffd700' }}
-                            />
+                            <input type="checkbox" checked={godMode.current} onChange={() => { godMode.current = !godMode.current }} style={{ width: 16, height: 16, accentColor: '#ffd700' }} />
                             <span style={{ color: '#ffd700', fontWeight: 'bold' }}>⚡ God Mode</span>
                         </label>
                     </div>
-                    <div style={{ marginTop: 12, color: '#888', fontSize: 11 }}>
+
+                    <div style={{ borderTop: '1px solid #ff00ff33', margin: '10px 0' }} />
+
+                    {/* === GRAPHICS === */}
+                    <div style={{ color: '#00ffff88', fontSize: 10, fontWeight: 'bold', marginBottom: 6, letterSpacing: 1 }}>⚙️ GRAPHICS</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showFog.current} onChange={() => { showFog.current = !showFog.current; bgFrameCounter.current = 0 }} style={{ width: 16, height: 16, accentColor: '#88aacc' }} />
+                            <span style={{ color: '#88aacc' }}>🌫️ Fog</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showSkyline.current} onChange={() => { showSkyline.current = !showSkyline.current }} style={{ width: 16, height: 16, accentColor: '#aa88ff' }} />
+                            <span style={{ color: '#aa88ff' }}>🏙️ Skyline</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showBeacons.current} onChange={() => { showBeacons.current = !showBeacons.current }} style={{ width: 16, height: 16, accentColor: '#ff4444' }} />
+                            <span style={{ color: '#ff4444' }}>🔴 Beacons</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showFlyingCars.current} onChange={() => { showFlyingCars.current = !showFlyingCars.current }} style={{ width: 16, height: 16, accentColor: '#ffffcc' }} />
+                            <span style={{ color: '#ffffcc' }}>🚗 Flying Cars</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showGlow.current} onChange={() => { showGlow.current = !showGlow.current }} style={{ width: 16, height: 16, accentColor: '#ff88ff' }} />
+                            <span style={{ color: '#ff88ff' }}>✨ Glow Effects</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showParticles.current} onChange={() => { showParticles.current = !showParticles.current }} style={{ width: 16, height: 16, accentColor: '#ffaa44' }} />
+                            <span style={{ color: '#ffaa44' }}>💥 Particles</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={showWeatherFX.current} onChange={() => { showWeatherFX.current = !showWeatherFX.current }} style={{ width: 16, height: 16, accentColor: '#66ff66' }} />
+                            <span style={{ color: '#66ff66' }}>🌧️ Weather FX</span>
+                        </label>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid #ff00ff33', margin: '10px 0' }} />
+
+                    {/* === VIEW === */}
+                    <div style={{ color: '#00ffff88', fontSize: 10, fontWeight: 'bold', marginBottom: 6, letterSpacing: 1 }}>📱 VIEW</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                if (!document.fullscreenElement) {
+                                    containerRef.current?.requestFullscreen()
+                                } else {
+                                    document.exitFullscreen()
+                                }
+                            }}
+                            style={{
+                                background: isFullscreen ? '#ff00ff33' : '#00ffff22',
+                                border: `1px solid ${isFullscreen ? '#ff00ff' : '#00ffff'}`,
+                                color: isFullscreen ? '#ff00ff' : '#00ffff',
+                                borderRadius: 6,
+                                padding: '6px 12px',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                fontWeight: 'bold',
+                                fontFamily: 'monospace'
+                            }}
+                        >
+                            {isFullscreen ? '⬜ Exit Fullscreen' : '⬛ Fullscreen'}
+                        </button>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 2 }}>
+                            <input
+                                type="checkbox"
+                                checked={simulateMobile}
+                                onChange={(e) => {
+                                    e.stopPropagation()
+                                    setSimulateMobile(!simulateMobile)
+                                }}
+                                style={{ width: 16, height: 16, accentColor: '#ff8800' }}
+                            />
+                            <span style={{ color: '#ff8800' }}>📱 Mobile View</span>
+                        </label>
+                    </div>
+
+                    <div style={{ marginTop: 10, color: '#666', fontSize: 10 }}>
                         Press ` to toggle
                     </div>
                 </div>
