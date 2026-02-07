@@ -1204,11 +1204,17 @@ const GameEngine = () => {
                     ctx.shadowBlur = 0
                 }
 
-                // === ACID RAIN SYSTEM ===
+                // === WEATHER SYSTEM ===
                 const timeSinceStart = Date.now() - gameStartTime.current
                 const acidRainActive = timeSinceStart > ACID_RAIN_DELAY
 
-                if (acidRainActive && acidRainEnabled.current) {
+                // Pre-sandstorm transition: stop acid rain 5 pts before sandstorm
+                const preStormThreshold = SANDSTORM_TRIGGER_SCORE - 5
+                const nextStormScore = Math.ceil(score / SANDSTORM_TRIGGER_SCORE) * SANDSTORM_TRIGGER_SCORE
+                const isApproachingSandstorm = sandstormEnabled.current && score >= preStormThreshold && score < SANDSTORM_TRIGGER_SCORE && !sandstormActiveRef.current
+                const suppressRain = sandstormActiveRef.current || isApproachingSandstorm
+
+                if (acidRainActive && acidRainEnabled.current && !suppressRain) {
                     // Spawn new rain drops (slight diagonal for speed effect)
                     if (Math.random() < 0.3) {
                         rainDrops.current.push({
@@ -1295,6 +1301,68 @@ const GameEngine = () => {
                     ctx.shadowBlur = 0
                 }
 
+                // Still draw existing rain drops draining off during transition
+                if (suppressRain && rainDrops.current.length > 0) {
+                    for (let i = rainDrops.current.length - 1; i >= 0; i--) {
+                        const drop = rainDrops.current[i]
+                        drop.y += drop.speed
+                        drop.x += drop.vx
+                        ctx.strokeStyle = '#88ff00'
+                        ctx.shadowColor = '#88ff00'
+                        ctx.shadowBlur = 4 * scale
+                        ctx.lineWidth = 2 * scale
+                        ctx.beginPath()
+                        ctx.moveTo(drop.x, drop.y)
+                        ctx.lineTo(drop.x - drop.vx * 2, drop.y + drop.length)
+                        ctx.stroke()
+                        ctx.shadowBlur = 0
+                        if (drop.y > canvas.height || drop.x < -50) {
+                            rainDrops.current.splice(i, 1)
+                        }
+                    }
+                }
+
+                // Pre-sandstorm transition: gradual yellow overlay fade-in
+                if (isApproachingSandstorm) {
+                    const transitionProgress = (score - preStormThreshold) / 5  // 0 to 1
+                    ctx.fillStyle = `rgba(180, 140, 60, ${0.04 + transitionProgress * 0.12})`
+                    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+                    // A few early sand wisps
+                    if (Math.random() < transitionProgress * 0.15) {
+                        sandParticles.current.push({
+                            x: -10 - Math.random() * 50,
+                            y: Math.random() * canvas.height,
+                            speed: (4 + Math.random() * 4) * scale,
+                            size: (1 + Math.random() * 2) * scale,
+                            opacity: 0.1 + Math.random() * 0.2
+                        })
+                    }
+                    for (let i = sandParticles.current.length - 1; i >= 0; i--) {
+                        const sand = sandParticles.current[i]
+                        sand.x += sand.speed
+                        sand.y += (Math.random() - 0.5) * scale
+                        ctx.globalAlpha = sand.opacity
+                        ctx.fillStyle = '#c4a84f'
+                        ctx.beginPath()
+                        ctx.ellipse(sand.x, sand.y, sand.size * 2, sand.size, 0, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = 1
+                        if (sand.x > canvas.width + 50) sandParticles.current.splice(i, 1)
+                    }
+
+                    // Pulsing warning
+                    const pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7
+                    ctx.globalAlpha = pulse
+                    ctx.fillStyle = '#c4a84f'
+                    ctx.shadowColor = '#d4b86f'
+                    ctx.shadowBlur = 10 * scale
+                    ctx.font = `bold ${12 * scale}px monospace`
+                    ctx.fillText('SANDSTORM INCOMING', canvas.width - 160 * scale, 30 * scale)
+                    ctx.shadowBlur = 0
+                    ctx.globalAlpha = 1
+                }
+
                 // === SANDSTORM WEATHER SYSTEM ===
                 // Trigger sandstorm at score multiples of 60
                 if (sandstormEnabled.current && score >= SANDSTORM_TRIGGER_SCORE && score % SANDSTORM_TRIGGER_SCORE === 0 && score !== lastSandstormScore.current) {
@@ -1347,12 +1415,13 @@ const GameEngine = () => {
                         }
                     }
 
-                    // Sandstorm warning text
+                    // Sandstorm active text with countdown
+                    const sandTimeLeft = Math.ceil((sandstormEndTime.current - Date.now()) / 1000)
                     ctx.fillStyle = '#c4a84f'
                     ctx.shadowColor = '#d4b86f'
                     ctx.shadowBlur = 10 * scale
                     ctx.font = `bold ${12 * scale}px monospace`
-                    ctx.fillText('SANDSTORM', canvas.width - 100 * scale, 50 * scale)
+                    ctx.fillText(`SANDSTORM ${sandTimeLeft}s`, canvas.width - 120 * scale, 30 * scale)
                     ctx.shadowBlur = 0
                 }
 
