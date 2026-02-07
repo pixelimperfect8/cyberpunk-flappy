@@ -56,6 +56,8 @@ const GameEngine = () => {
     // Parallax skyline backgrounds
     const skylineBack = useRef<HTMLImageElement | null>(null)
     const skylineFront = useRef<HTMLImageElement | null>(null)
+    const skylineBack2 = useRef<HTMLImageElement | null>(null)
+    const skylineFront2 = useRef<HTMLImageElement | null>(null)
     const skylineBackX = useRef(0)
     const skylineFrontX = useRef(0)
 
@@ -93,13 +95,16 @@ const GameEngine = () => {
     const explosionParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, size: number, color: string }[]>([])
     const ACID_RAIN_DELAY = 15000 // 15 seconds before acid rain starts
 
-    // Sandstorm weather system - triggers at 60 points, lasts 12 seconds
+    // Sandstorm weather system - triggers at 60 points, lasts 12 seconds (17s after level 150)
     const sandParticles = useRef<{ x: number, y: number, speed: number, size: number, opacity: number }[]>([])
     const sandstormActiveRef = useRef(false)
     const sandstormEndTime = useRef(0)
     const lastSandstormScore = useRef(0)
     const SANDSTORM_TRIGGER_SCORE = 60
-    const SANDSTORM_DURATION = 12000 // 12 seconds
+    const SANDSTORM_DURATION_BASE = 12000 // 12 seconds
+    const SANDSTORM_DURATION_LVL2 = 17000 // 17 seconds after score 150
+    const LEVEL_2_SCORE = 150
+    const LEVEL_2_OVERLAY_END = 300
 
     // Dev mode controls
     const [devModeOpen, setDevModeOpen] = useState(false)
@@ -249,6 +254,13 @@ const GameEngine = () => {
         const skyFront = new Image()
         skyFront.src = '/skyline_front.png'
         skyFront.onload = () => skylineFront.current = skyFront
+        // Level 2 backdrops (score 150+)
+        const skyBack2 = new Image()
+        skyBack2.src = '/2back.png'
+        skyBack2.onload = () => skylineBack2.current = skyBack2
+        const skyFront2 = new Image()
+        skyFront2.src = '/2front.png'
+        skyFront2.onload = () => skylineFront2.current = skyFront2
         // Load tower/obstacle sprites - separate top and bottom
         TOP_TOWER_PATHS.forEach((path, index) => {
             const towerImg = new Image()
@@ -513,28 +525,37 @@ const GameEngine = () => {
             // === PARALLAX SKYLINE BACKGROUNDS ===
             const skyScrollSpeed = scaledPipeSpeed * 0.3
 
+            // Choose skyline based on score level
+            const useLevel2 = score >= LEVEL_2_SCORE
+            const activeBack = useLevel2 && skylineBack2.current ? skylineBack2.current : skylineBack.current
+            const activeFront = useLevel2 && skylineFront2.current ? skylineFront2.current : skylineFront.current
+
             // Draw back skyline (slower, distant)
-            if (skylineBack.current) {
+            if (activeBack) {
                 skylineBackX.current -= skyScrollSpeed * 0.3
-                const backImg = skylineBack.current
                 const backH = GROUND_Y - HORIZON_Y + 50 * scale
-                const backW = backImg.width * (backH / backImg.height)
+                const backW = activeBack.width * (backH / activeBack.height)
                 if (skylineBackX.current <= -backW) skylineBackX.current = 0
                 ctx.globalAlpha = 0.7
-                ctx.drawImage(backImg, skylineBackX.current, HORIZON_Y - 50 * scale, backW, backH)
-                ctx.drawImage(backImg, skylineBackX.current + backW, HORIZON_Y - 50 * scale, backW, backH)
+                ctx.drawImage(activeBack, skylineBackX.current, HORIZON_Y - 50 * scale, backW, backH)
+                ctx.drawImage(activeBack, skylineBackX.current + backW, HORIZON_Y - 50 * scale, backW, backH)
                 ctx.globalAlpha = 1
             }
 
             // Draw front skyline (faster, closer)
-            if (skylineFront.current) {
+            if (activeFront) {
                 skylineFrontX.current -= skyScrollSpeed * 0.6
-                const frontImg = skylineFront.current
                 const frontH = GROUND_Y - HORIZON_Y + 80 * scale
-                const frontW = frontImg.width * (frontH / frontImg.height)
+                const frontW = activeFront.width * (frontH / activeFront.height)
                 if (skylineFrontX.current <= -frontW) skylineFrontX.current = 0
-                ctx.drawImage(frontImg, skylineFrontX.current, HORIZON_Y - 80 * scale, frontW, frontH)
-                ctx.drawImage(frontImg, skylineFrontX.current + frontW, HORIZON_Y - 80 * scale, frontW, frontH)
+                ctx.drawImage(activeFront, skylineFrontX.current, HORIZON_Y - 80 * scale, frontW, frontH)
+                ctx.drawImage(activeFront, skylineFrontX.current + frontW, HORIZON_Y - 80 * scale, frontW, frontH)
+            }
+
+            // Persistent yellow overlay for level 2 (score 150-300)
+            if (score >= LEVEL_2_SCORE && score < LEVEL_2_OVERLAY_END) {
+                ctx.fillStyle = 'rgba(180, 140, 60, 0.08)'
+                ctx.fillRect(0, 0, canvas.width, canvas.height)
             }
 
 
@@ -1394,7 +1415,8 @@ const GameEngine = () => {
                 // Trigger sandstorm at score multiples of 60
                 if (sandstormEnabled.current && score >= SANDSTORM_TRIGGER_SCORE && score % SANDSTORM_TRIGGER_SCORE === 0 && score !== lastSandstormScore.current) {
                     sandstormActiveRef.current = true
-                    sandstormEndTime.current = Date.now() + SANDSTORM_DURATION
+                    const stormDuration = score >= LEVEL_2_SCORE ? SANDSTORM_DURATION_LVL2 : SANDSTORM_DURATION_BASE
+                    sandstormEndTime.current = Date.now() + stormDuration
                     lastSandstormScore.current = score
                 }
                 // Check if sandstorm has expired
