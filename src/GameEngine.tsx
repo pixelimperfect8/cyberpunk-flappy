@@ -79,7 +79,18 @@ const GameEngine = () => {
     const powerUpEndTime = useRef(0)
     const pill = useRef<{ x: number, y: number, rotation: number } | null>(null)
     const pillSpawnTimer = useRef(0)
-    const projectiles = useRef<{ x: number, y: number }[]>([])
+    const projectiles = useRef<{ x: number, y: number, vy?: number }[]>([])
+
+    // Poster power-up system (mega mode - bigger + multi-shot stream)
+    const posterSprite = useRef<HTMLImageElement | null>(null)
+    const posterActive = useRef(false)
+    const posterEndTime = useRef(0)
+    const poster = useRef<{ x: number, y: number, rotation: number } | null>(null)
+    const posterSpawnTimer = useRef(0)
+    const posterAutoFireTimer = useRef(0)
+    const POSTER_DURATION = 6500 // 6.5 seconds
+    const POSTER_SIZE_MULT = 1.25 // 25% bigger
+    const POSTER_SPAWN_INTERVAL = 60 * 60 // ~60 seconds at 60fps
 
     // Blue pill system (debuff - makes bird bigger, game faster)
     const bluePillActive = useRef(false)
@@ -276,6 +287,10 @@ const GameEngine = () => {
         const bluePillImg = new Image()
         bluePillImg.src = '/bluepill.png'
         bluePillImg.onload = () => bluePillSprite.current = bluePillImg
+        // Load poster sprite
+        const posterImg = new Image()
+        posterImg.src = '/poster.png'
+        posterImg.onload = () => posterSprite.current = posterImg
         // Load tower/obstacle sprites - separate top and bottom
         TOP_TOWER_PATHS.forEach((path, index) => {
             const towerImg = new Image()
@@ -336,6 +351,12 @@ const GameEngine = () => {
         sandstormEndTime.current = 0
         lastSandstormScore.current = 0
         sandParticles.current = []
+        // Reset poster
+        posterActive.current = false
+        posterEndTime.current = 0
+        poster.current = null
+        posterSpawnTimer.current = 0
+        posterAutoFireTimer.current = 0
         setGameState('START')
     }
 
@@ -360,8 +381,16 @@ const GameEngine = () => {
             const mobileSpeedMult = isMobile ? 1.3 : 1
             birdVelocity.current = LIFT * scale * mobileSpeedMult
             // Fire projectile if power-up is active
-            if (powerUpActive.current) {
-                projectiles.current.push({ x: 80 * scale, y: birdY.current + 15 * scale })
+            if (powerUpActive.current || posterActive.current) {
+                if (posterActive.current) {
+                    // Multi-directional spread
+                    const angles = [-0.3, -0.15, 0, 0.15, 0.3]
+                    for (const angle of angles) {
+                        projectiles.current.push({ x: 80 * scale, y: birdY.current + 15 * scale, vy: Math.sin(angle) * 4 * scale })
+                    }
+                } else {
+                    projectiles.current.push({ x: 80 * scale, y: birdY.current + 15 * scale })
+                }
             }
         } else if (gameState === 'START' || gameState === 'GAME_OVER') {
             startGame()
@@ -408,7 +437,8 @@ const GameEngine = () => {
         const sandstormMult = sandstormActiveRef.current ? BLUE_PILL_SPEED_MULT : 1  // Same speed as blue pill
         const scaledPipeSpeed = PIPE_SPEED * scale * bluePillMult * sandstormMult * mobileSpeedMult
         const scaledPipeGap = PIPE_GAP * scale
-        const birdSizeMult = bluePillActive.current ? BLUE_PILL_SIZE_MULT : 1
+        const posterSizeMult = posterActive.current ? POSTER_SIZE_MULT : 1
+        const birdSizeMult = (bluePillActive.current ? BLUE_PILL_SIZE_MULT : 1) * posterSizeMult
         const scaledBirdSize = 30 * scale * birdSizeMult
         const scaledBirdX = 50 * scale
         const scaledPipeWidth = 50 * scale
@@ -769,7 +799,15 @@ const GameEngine = () => {
             }
 
             // Draw the sprite or fallback to colored square
-            if (bluePillActive.current && dickyBigSprite.current) {
+            if (posterActive.current && dickyAlt2.current) {
+                // Poster mega mode - use dicky_alt2!
+                const spriteW = scaledBirdSize * 3.5
+                const spriteH = scaledBirdSize * 2.5
+                ctx.shadowColor = '#ff8800'
+                ctx.shadowBlur = 25 * scale
+                ctx.drawImage(dickyAlt2.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
+                ctx.shadowBlur = 0
+            } else if (bluePillActive.current && dickyBigSprite.current) {
                 // Blue pill transformation - use big dicky sprite!
                 const spriteW = scaledBirdSize * 3.5  // Even bigger for transformation
                 const spriteH = scaledBirdSize * 2.5
@@ -959,10 +997,90 @@ const GameEngine = () => {
                     bluePillActive.current = false
                 }
 
+                // === POSTER POWER-UP ===
+                posterSpawnTimer.current++
+                if (!poster.current && posterSpawnTimer.current > POSTER_SPAWN_INTERVAL && pipes.current.length > 0) {
+                    const lastPipe = pipes.current[pipes.current.length - 1]
+                    const gapCenter = lastPipe.topHeight + scaledPipeGap / 2
+                    poster.current = { x: canvas.width + 30 * scale, y: gapCenter, rotation: 0 }
+                    posterSpawnTimer.current = 0
+                }
+
+                if (poster.current) {
+                    poster.current.x -= scaledPipeSpeed * 0.7
+                    poster.current.rotation += 0.03
+                    poster.current.y += Math.sin(globalTime * 0.08) * 0.8 * scale
+
+                    const ppx = poster.current.x
+                    const ppy = poster.current.y
+                    const posterSize = 30 * scale
+
+                    // Orange glow
+                    ctx.shadowColor = '#ff8800'
+                    ctx.shadowBlur = 20 * scale
+
+                    if (posterSprite.current) {
+                        ctx.save()
+                        ctx.translate(ppx, ppy)
+                        ctx.rotate(poster.current.rotation)
+                        ctx.drawImage(posterSprite.current, -posterSize / 2, -posterSize / 2, posterSize, posterSize)
+                        ctx.restore()
+                    } else {
+                        ctx.fillStyle = '#ff8800'
+                        ctx.beginPath()
+                        ctx.arc(ppx, ppy, posterSize / 2, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+
+                    // Glow ring
+                    ctx.strokeStyle = '#ffaa33'
+                    ctx.lineWidth = 2 * scale
+                    ctx.beginPath()
+                    ctx.arc(ppx, ppy, posterSize / 2 + 5 * scale, 0, Math.PI * 2)
+                    ctx.stroke()
+                    ctx.shadowBlur = 0
+
+                    // Collision detection
+                    if (scaledBirdX < ppx + posterSize / 2 && scaledBirdX + scaledBirdSize > ppx - posterSize / 2 &&
+                        birdY.current < ppy + posterSize / 2 && birdY.current + scaledBirdSize > ppy - posterSize / 2) {
+                        posterActive.current = true
+                        posterEndTime.current = Date.now() + POSTER_DURATION
+                        powerUpActive.current = true  // Also enable shooting
+                        powerUpEndTime.current = Date.now() + POSTER_DURATION
+                        poster.current = null
+                        playPillSound()
+                    }
+
+                    if (poster.current && poster.current.x < -50 * scale) {
+                        poster.current = null
+                    }
+                }
+
+                // Poster expiry
+                if (posterActive.current && Date.now() > posterEndTime.current) {
+                    posterActive.current = false
+                }
+
+                // Poster auto-fire stream
+                if (posterActive.current) {
+                    posterAutoFireTimer.current++
+                    if (posterAutoFireTimer.current % 5 === 0) {
+                        const angles = [-0.25, -0.12, 0, 0.12, 0.25]
+                        for (const angle of angles) {
+                            projectiles.current.push({
+                                x: scaledBirdX + scaledBirdSize,
+                                y: birdY.current + scaledBirdSize / 2,
+                                vy: Math.tan(angle) * 6 * scale
+                            })
+                        }
+                    }
+                }
+
                 // === PROJECTILES ===
                 for (let i = projectiles.current.length - 1; i >= 0; i--) {
                     const proj = projectiles.current[i]
                     proj.x += 8 * scale
+                    if (proj.vy) proj.y += proj.vy  // Spread shot vertical movement
 
                     ctx.shadowColor = '#ffffff'
                     ctx.shadowBlur = 10 * scale
