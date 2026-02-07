@@ -7,7 +7,7 @@ const loadHighScores = (): number[] => {
     try {
         const data = localStorage.getItem(HIGH_SCORE_KEY)
         return data ? JSON.parse(data) : []
-    } catch { return [] }
+    } catch (_e) { return [] }
 }
 
 const saveHighScore = (newScore: number): number[] => {
@@ -1237,7 +1237,7 @@ const GameEngine = () => {
 
                 // Pre-sandstorm transition: stop acid rain 5 pts before sandstorm
                 const preStormThreshold = SANDSTORM_TRIGGER_SCORE - 5
-                const nextStormScore = Math.ceil(score / SANDSTORM_TRIGGER_SCORE) * SANDSTORM_TRIGGER_SCORE
+
                 const isApproachingSandstorm = sandstormEnabled.current && score >= preStormThreshold && score < SANDSTORM_TRIGGER_SCORE && !sandstormActiveRef.current
                 const suppressRain = sandstormActiveRef.current || isApproachingSandstorm
 
