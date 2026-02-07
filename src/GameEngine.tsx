@@ -138,6 +138,7 @@ const GameEngine = () => {
 
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
+    const songLevel = useRef(1) // Track current song (1 = background.mp3, 2 = level2.mp3)
 
     const toggleMute = (e: React.MouseEvent) => {
         e.stopPropagation() // Prevent triggering jump
@@ -328,8 +329,11 @@ const GameEngine = () => {
         resetGame()
         setGameState('PLAYING')
         gameStartTime.current = Date.now() // Track when game started for acid rain
-        // Start background music
+        // Start background music (reset to song 1)
         if (audioRef.current) {
+            songLevel.current = 1
+            audioRef.current.src = '/background.mp3'
+            audioRef.current.loop = false
             audioRef.current.currentTime = 0
             audioRef.current.play().catch(() => { })
         }
@@ -1845,8 +1849,15 @@ const GameEngine = () => {
             <audio
                 ref={audioRef}
                 src="/background.mp3"
-                loop
                 preload="auto"
+                onEnded={() => {
+                    if (audioRef.current && songLevel.current === 1) {
+                        songLevel.current = 2
+                        audioRef.current.src = '/level2.mp3'
+                        audioRef.current.loop = true
+                        audioRef.current.play().catch(() => { })
+                    }
+                }}
             />
         </div>
     )
