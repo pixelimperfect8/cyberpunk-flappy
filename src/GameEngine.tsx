@@ -48,6 +48,8 @@ const GameEngine = () => {
     const animationFrameId = useRef<number>(0)
     const dickySprite = useRef<HTMLImageElement | null>(null)
     const dickyBigSprite = useRef<HTMLImageElement | null>(null) // Blue pill transformation sprite
+    const greenPillSprite = useRef<HTMLImageElement | null>(null)
+    const bluePillSprite = useRef<HTMLImageElement | null>(null)
     const dickyAlt1 = useRef<HTMLImageElement | null>(null) // Alternate sprite 1
     const dickyAlt2 = useRef<HTMLImageElement | null>(null) // Alternate sprite 2
     const currentAltSprite = useRef<number>(0) // 0 = normal, 1 = alt1, 2 = alt2
@@ -129,10 +131,15 @@ const GameEngine = () => {
         "You can't escape me!",
         "Nice try, little Dicky!",
         "Running won't save you!",
+        "Where's my dog, Dicky!?!",
         "I see you, Dicky!",
         "Your time is up!",
         "Keep flying... it won't help!",
         "Nowhere to run, Dicky!",
+        "You're toast, Dicky!",
+        "You're done, Dicky!",
+        "You're finished, Dicky!",
+        "Are you little Dicky or a little Puss?",
         "This ends now!"
     ]
 
@@ -262,6 +269,13 @@ const GameEngine = () => {
         const skyFront2 = new Image()
         skyFront2.src = '/2front.png'
         skyFront2.onload = () => skylineFront2.current = skyFront2
+        // Load pill sprites
+        const greenPillImg = new Image()
+        greenPillImg.src = '/greenpill.png'
+        greenPillImg.onload = () => greenPillSprite.current = greenPillImg
+        const bluePillImg = new Image()
+        bluePillImg.src = '/bluepill.png'
+        bluePillImg.onload = () => bluePillSprite.current = bluePillImg
         // Load tower/obstacle sprites - separate top and bottom
         TOP_TOWER_PATHS.forEach((path, index) => {
             const towerImg = new Image()
@@ -846,40 +860,22 @@ const GameEngine = () => {
                     const tabletWidth = Math.abs(Math.cos(rot)) * tabletRadius + 4 * scale
                     const tabletHeight = tabletRadius
 
-                    ctx.fillStyle = 'rgba(0, 80, 0, 0.4)'
-                    ctx.beginPath()
-                    ctx.ellipse(px + 4 * scale, py + tabletRadius + 8 * scale, tabletWidth * 0.7, 5 * scale, 0, 0, Math.PI * 2)
-                    ctx.fill()
-
-                    const tabletGrad = ctx.createLinearGradient(px - tabletWidth, py, px + tabletWidth, py)
-                    tabletGrad.addColorStop(0, '#1a6b1a')
-                    tabletGrad.addColorStop(0.3, '#33cc33')
-                    tabletGrad.addColorStop(0.5, '#55ee55')
-                    tabletGrad.addColorStop(0.7, '#33cc33')
-                    tabletGrad.addColorStop(1, '#1a6b1a')
-
-                    ctx.fillStyle = tabletGrad
-                    ctx.beginPath()
-                    ctx.ellipse(px, py, tabletWidth, tabletHeight, 0, 0, Math.PI * 2)
-                    ctx.fill()
-
-                    ctx.fillStyle = '#228822'
-                    ctx.beginPath()
-                    ctx.ellipse(px, py + 3 * scale, tabletWidth * 0.95, tabletHeight * 0.4, 0, 0, Math.PI)
-                    ctx.fill()
-
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
-                    ctx.beginPath()
-                    ctx.ellipse(px, py - 2 * scale, tabletWidth * 0.4, tabletHeight * 0.35, 0, 0, Math.PI * 2)
-                    ctx.fill()
-
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
-                    ctx.beginPath()
-                    ctx.ellipse(px - tabletWidth * 0.3, py - tabletHeight * 0.4, 4 * scale, 3 * scale, -0.5, 0, Math.PI * 2)
-                    ctx.fill()
-
+                    // Green glow
                     ctx.shadowColor = '#00ff00'
                     ctx.shadowBlur = 15 * scale
+
+                    if (greenPillSprite.current) {
+                        const spriteSize = tabletRadius * 2.5
+                        ctx.drawImage(greenPillSprite.current, px - spriteSize / 2, py - spriteSize / 2, spriteSize, spriteSize)
+                    } else {
+                        // Fallback circle
+                        ctx.fillStyle = '#33cc33'
+                        ctx.beginPath()
+                        ctx.ellipse(px, py, tabletWidth, tabletHeight, 0, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+
+                    // Glow ring
                     ctx.strokeStyle = '#44ff44'
                     ctx.lineWidth = 2 * scale
                     ctx.beginPath()
@@ -921,28 +917,22 @@ const GameEngine = () => {
                     const bpWidth = Math.abs(Math.cos(bpRot)) * bpRadius + 4 * scale
                     const bpHeight = bpRadius
 
-                    // Shadow
-                    ctx.fillStyle = 'rgba(0, 0, 80, 0.4)'
-                    ctx.beginPath()
-                    ctx.ellipse(bpx + 4 * scale, bpy + bpRadius + 8 * scale, bpWidth * 0.7, 5 * scale, 0, 0, Math.PI * 2)
-                    ctx.fill()
-
-                    // Blue pill gradient
-                    const bpGrad = ctx.createLinearGradient(bpx - bpWidth, bpy, bpx + bpWidth, bpy)
-                    bpGrad.addColorStop(0, '#1a1a6b')
-                    bpGrad.addColorStop(0.3, '#3333cc')
-                    bpGrad.addColorStop(0.5, '#5555ee')
-                    bpGrad.addColorStop(0.7, '#3333cc')
-                    bpGrad.addColorStop(1, '#1a1a6b')
-
-                    ctx.fillStyle = bpGrad
-                    ctx.beginPath()
-                    ctx.ellipse(bpx, bpy, bpWidth, bpHeight, 0, 0, Math.PI * 2)
-                    ctx.fill()
-
                     // Blue glow
                     ctx.shadowColor = '#0088ff'
                     ctx.shadowBlur = 15 * scale
+
+                    if (bluePillSprite.current) {
+                        const spriteSize = bpRadius * 2.5
+                        ctx.drawImage(bluePillSprite.current, bpx - spriteSize / 2, bpy - spriteSize / 2, spriteSize, spriteSize)
+                    } else {
+                        // Fallback circle
+                        ctx.fillStyle = '#3333cc'
+                        ctx.beginPath()
+                        ctx.ellipse(bpx, bpy, bpWidth, bpHeight, 0, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+
+                    // Glow ring
                     ctx.strokeStyle = '#4488ff'
                     ctx.lineWidth = 2 * scale
                     ctx.beginPath()
