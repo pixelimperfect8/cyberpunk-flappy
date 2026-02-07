@@ -1013,7 +1013,7 @@ const GameEngine = () => {
 
                     const ppx = poster.current.x
                     const ppy = poster.current.y
-                    const posterSize = 30 * scale
+                    const posterSize = 60 * scale
 
                     // Orange glow
                     ctx.shadowColor = '#ff8800'
