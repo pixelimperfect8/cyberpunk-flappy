@@ -154,6 +154,23 @@ const GameEngine = () => {
         "This ends now!"
     ]
 
+    // Phase 2 Boss intro system
+    const bossSprite = useRef<HTMLImageElement | null>(null)
+    const bossIntroActive = useRef(false)
+    const bossIntroStartTime = useRef(0)
+    const bossIntroTriggered = useRef(false)
+    const bossMessageIndex = useRef(0)
+    const bossCharIndex = useRef(0)
+    const bossLastCharTime = useRef(0)
+    const BOSS_MESSAGES = [
+        "I hope you enjoyed your little headstart, Dicky.",
+        "But it's over now.",
+        "I'm coming for you."
+    ]
+    const BOSS_GLITCH_DURATION = 3000 // 3 seconds of glitching
+    const BOSS_MESSAGE_CHAR_SPEED = 40 // ms per character (typewriter)
+    const BOSS_MESSAGE_PAUSE = 1200 // pause between messages
+
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const songLevel = useRef(1) // Track current song (1 = background.mp3, 2 = level2.mp3)
@@ -291,6 +308,10 @@ const GameEngine = () => {
         const posterImg = new Image()
         posterImg.src = '/poster.png'
         posterImg.onload = () => posterSprite.current = posterImg
+        // Load boss sprite
+        const bossImg = new Image()
+        bossImg.src = '/boss.png'
+        bossImg.onload = () => bossSprite.current = bossImg
         // Load tower/obstacle sprites - separate top and bottom
         TOP_TOWER_PATHS.forEach((path, index) => {
             const towerImg = new Image()
@@ -357,6 +378,12 @@ const GameEngine = () => {
         poster.current = null
         posterSpawnTimer.current = 0
         posterAutoFireTimer.current = 0
+        // Reset boss intro
+        bossIntroActive.current = false
+        bossIntroTriggered.current = false
+        bossIntroStartTime.current = 0
+        bossMessageIndex.current = 0
+        bossCharIndex.current = 0
         setGameState('START')
     }
 
@@ -1671,6 +1698,179 @@ const GameEngine = () => {
                     ctx.globalAlpha = 1
                 } else if (Date.now() >= tauntEndTime.current) {
                     currentTaunt.current = null
+                }
+
+                // === PHASE 2 BOSS INTRO ===
+                if (score >= LEVEL_2_SCORE && !bossIntroTriggered.current) {
+                    bossIntroTriggered.current = true
+                    bossIntroActive.current = true
+                    bossIntroStartTime.current = Date.now()
+                    bossMessageIndex.current = 0
+                    bossCharIndex.current = 0
+                    bossLastCharTime.current = Date.now() + BOSS_GLITCH_DURATION // Start typing after glitch
+                }
+
+                if (bossIntroActive.current) {
+                    const elapsed = Date.now() - bossIntroStartTime.current
+                    const isGlitching = elapsed < BOSS_GLITCH_DURATION
+                    const faceSize = 90 * scale
+                    const faceX = 15 * scale
+                    const faceY = canvas.height - faceSize - 70 * scale
+
+                    ctx.save()
+
+                    if (isGlitching) {
+                        // === CYBERPUNK GLITCH EFFECT ===
+                        const glitchIntensity = 1 - (elapsed / BOSS_GLITCH_DURATION) * 0.7
+                        const t = Date.now()
+
+                        // Screen flash
+                        if (Math.random() < 0.1 * glitchIntensity) {
+                            ctx.fillStyle = `rgba(255, 255, 0, ${0.05 * glitchIntensity})`
+                            ctx.fillRect(0, 0, canvas.width, canvas.height)
+                        }
+
+                        // Glitch scanlines
+                        for (let sl = 0; sl < 5; sl++) {
+                            if (Math.random() < 0.3 * glitchIntensity) {
+                                const slY = faceY + Math.random() * faceSize
+                                const slH = (1 + Math.random() * 3) * scale
+                                ctx.fillStyle = `rgba(255, 255, 0, ${0.3 * glitchIntensity})`
+                                ctx.fillRect(faceX - 5 * scale, slY, faceSize + 10 * scale, slH)
+                            }
+                        }
+
+                        // Neon yellow border with glitch
+                        ctx.shadowColor = '#ffff00'
+                        ctx.shadowBlur = (15 + Math.sin(t * 0.02) * 10) * scale * glitchIntensity
+                        ctx.strokeStyle = '#ffff00'
+                        ctx.lineWidth = 3 * scale
+                        const offsetX = (Math.random() - 0.5) * 8 * scale * glitchIntensity
+                        const offsetY = (Math.random() - 0.5) * 8 * scale * glitchIntensity
+                        ctx.strokeRect(faceX + offsetX, faceY + offsetY, faceSize, faceSize)
+                        ctx.shadowBlur = 0
+
+                        // Draw boss with RGB split glitch
+                        if (bossSprite.current) {
+                            // Red channel offset
+                            ctx.globalCompositeOperation = 'lighter'
+                            ctx.globalAlpha = 0.6
+                            const rgbOff = 4 * scale * glitchIntensity
+                            ctx.drawImage(bossSprite.current, faceX - rgbOff + offsetX, faceY + offsetY, faceSize, faceSize)
+                            ctx.globalCompositeOperation = 'source-over'
+                            ctx.globalAlpha = 0.8 + Math.random() * 0.2
+                            ctx.drawImage(bossSprite.current, faceX + offsetX, faceY + offsetY, faceSize, faceSize)
+                            ctx.globalAlpha = 1
+                        }
+
+                        // Glitch text flicker
+                        if (Math.random() < 0.4) {
+                            ctx.fillStyle = '#ffff00'
+                            ctx.shadowColor = '#ffff00'
+                            ctx.shadowBlur = 10 * scale
+                            ctx.font = `bold ${14 * scale}px monospace`
+                            ctx.textAlign = 'left'
+                            const glitchTexts = ['INCOMING SIGNAL...', 'DECRYPTING...', '???', 'UNKNOWN ENTITY', 'WARNING']
+                            ctx.fillText(glitchTexts[Math.floor(Math.random() * glitchTexts.length)], faceX + faceSize + 15 * scale, faceY + 30 * scale)
+                            ctx.shadowBlur = 0
+                        }
+                    } else {
+                        // === STABILIZED - Sequential messages ===
+                        // Neon yellow border (stable)
+                        ctx.shadowColor = '#ffff00'
+                        ctx.shadowBlur = 12 * scale
+                        ctx.strokeStyle = '#ffff00'
+                        ctx.lineWidth = 3 * scale
+                        ctx.strokeRect(faceX, faceY, faceSize, faceSize)
+                        ctx.shadowBlur = 0
+
+                        // Draw boss face (stable)
+                        if (bossSprite.current) {
+                            ctx.drawImage(bossSprite.current, faceX, faceY, faceSize, faceSize)
+                        }
+
+                        // Typewriter text system
+                        const now = Date.now()
+                        if (bossMessageIndex.current < BOSS_MESSAGES.length) {
+                            const currentMsg = BOSS_MESSAGES[bossMessageIndex.current]
+
+                            // Advance character
+                            if (bossCharIndex.current < currentMsg.length && now - bossLastCharTime.current > BOSS_MESSAGE_CHAR_SPEED) {
+                                bossCharIndex.current++
+                                bossLastCharTime.current = now
+                            }
+
+                            // Move to next message after pause
+                            if (bossCharIndex.current >= currentMsg.length && now - bossLastCharTime.current > BOSS_MESSAGE_PAUSE) {
+                                bossMessageIndex.current++
+                                bossCharIndex.current = 0
+                                bossLastCharTime.current = now
+                            }
+
+                            // Draw speech bubble
+                            const bubbleX = faceX + faceSize + 12 * scale
+                            const bubbleY = faceY
+                            const bubbleWidth = Math.min(220 * scale, canvas.width - bubbleX - 20 * scale)
+                            const bubbleHeight = 60 * scale
+
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'
+                            ctx.strokeStyle = '#ffff00'
+                            ctx.lineWidth = 2 * scale
+                            ctx.beginPath()
+                            ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8 * scale)
+                            ctx.fill()
+                            ctx.stroke()
+
+                            // Bubble pointer
+                            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'
+                            ctx.beginPath()
+                            ctx.moveTo(bubbleX, bubbleY + 15 * scale)
+                            ctx.lineTo(bubbleX - 10 * scale, bubbleY + 25 * scale)
+                            ctx.lineTo(bubbleX, bubbleY + 35 * scale)
+                            ctx.fill()
+
+                            // Draw current text with typewriter
+                            const displayText = currentMsg.substring(0, bossCharIndex.current)
+                            ctx.fillStyle = '#ffff00'
+                            ctx.shadowColor = '#ffff00'
+                            ctx.shadowBlur = 5 * scale
+                            ctx.font = `bold ${11 * scale}px monospace`
+                            ctx.textAlign = 'left'
+
+                            // Word wrap
+                            const words = displayText.split(' ')
+                            let line = ''
+                            let ty = bubbleY + 20 * scale
+                            for (const word of words) {
+                                const testLine = line + word + ' '
+                                if (ctx.measureText(testLine).width > bubbleWidth - 20 * scale) {
+                                    ctx.fillText(line.trim(), bubbleX + 10 * scale, ty)
+                                    line = word + ' '
+                                    ty += 15 * scale
+                                } else {
+                                    line = testLine
+                                }
+                            }
+                            ctx.fillText(line.trim(), bubbleX + 10 * scale, ty)
+
+                            // Blinking cursor
+                            if (bossCharIndex.current < currentMsg.length && Math.floor(now / 300) % 2 === 0) {
+                                const cursorX = bubbleX + 10 * scale + ctx.measureText(line.trim()).width + 2 * scale
+                                ctx.fillRect(cursorX, ty - 10 * scale, 2 * scale, 12 * scale)
+                            }
+                            ctx.shadowBlur = 0
+                        } else {
+                            // All messages done - fade out
+                            const fadeStart = bossLastCharTime.current
+                            const fadeProgress = (now - fadeStart) / 1500
+                            if (fadeProgress >= 1) {
+                                bossIntroActive.current = false
+                            }
+                        }
+                    }
+
+                    ctx.restore()
+                    ctx.globalAlpha = 1
                 }
 
                 if (birdY.current + scaledBirdSize >= canvas.height - 20 * scale || birdY.current < 0) {
