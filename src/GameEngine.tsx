@@ -1,5 +1,24 @@
 ﻿import { useEffect, useRef, useState, useCallback } from 'react'
 
+const HIGH_SCORE_KEY = 'cyberpunk-flappy-highscores'
+const MAX_HIGH_SCORES = 10
+
+const loadHighScores = (): number[] => {
+    try {
+        const data = localStorage.getItem(HIGH_SCORE_KEY)
+        return data ? JSON.parse(data) : []
+    } catch { return [] }
+}
+
+const saveHighScore = (newScore: number): number[] => {
+    const scores = loadHighScores()
+    scores.push(newScore)
+    scores.sort((a, b) => b - a)
+    const top = scores.slice(0, MAX_HIGH_SCORES)
+    localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify(top))
+    return top
+}
+
 const GameEngine = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
@@ -7,6 +26,8 @@ const GameEngine = () => {
     const [score, setScore] = useState(0)
     const [canvasSize, setCanvasSize] = useState({ width: 400, height: 600 })
     const [isMuted, setIsMuted] = useState(false)
+    const [highScores, setHighScores] = useState<number[]>(loadHighScores())
+    const scoreSaved = useRef(false)
 
     // Game Constants (will be scaled based on canvas size)
     const BASE_HEIGHT = 600
@@ -282,6 +303,12 @@ const GameEngine = () => {
         splashParticles.current = []
         gameStartTime.current = 0
         setScore(0)
+        scoreSaved.current = false
+        // Reset sandstorm
+        sandstormActiveRef.current = false
+        sandstormEndTime.current = 0
+        lastSandstormScore.current = 0
+        sandParticles.current = []
         setGameState('START')
     }
 
@@ -1513,7 +1540,9 @@ const GameEngine = () => {
                 }
 
                 if (birdY.current + scaledBirdSize >= canvas.height - 20 * scale || birdY.current < 0) {
-                    setGameState('GAME_OVER')
+                    if (!godMode.current) {
+                        setGameState('GAME_OVER')
+                    }
                 }
             } else if (gameState === 'START') {
                 ctx.fillStyle = 'white'
@@ -1546,18 +1575,113 @@ const GameEngine = () => {
                 ctx.font = `${18 * scale}px Arial`
                 ctx.fillText('Press ESC or ENTER to resume', canvas.width / 2 - 110 * scale, canvas.height / 2 + 40 * scale)
             } else if (gameState === 'GAME_OVER') {
-                pipes.current.forEach(p => {
-                    ctx.fillStyle = '#73bf2e'
-                    ctx.fillRect(p.x, 0, scaledPipeWidth, p.topHeight)
-                    ctx.fillRect(p.x, p.topHeight + scaledPipeGap, scaledPipeWidth, canvas.height - (p.topHeight + scaledPipeGap) - 20 * scale)
-                })
+                // Save score once on game over
+                if (!scoreSaved.current) {
+                    scoreSaved.current = true
+                    const updated = saveHighScore(score)
+                    setHighScores(updated)
+                }
 
-                ctx.fillStyle = 'white'
-                ctx.font = `${30 * scale}px Arial`
-                ctx.fillText('Game Over', canvas.width / 2 - 70 * scale, canvas.height / 2)
-                ctx.font = `${20 * scale}px Arial`
-                ctx.fillText(`Score: ${score}`, canvas.width / 2 - 40 * scale, canvas.height / 2 + 40 * scale)
-                ctx.fillText('Press Space to Restart', canvas.width / 2 - 90 * scale, canvas.height / 2 + 70 * scale)
+                // Dark overlay
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+                ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+                const centerX = canvas.width / 2
+                const panelW = 260 * scale
+                const panelH = 380 * scale
+                const panelX = centerX - panelW / 2
+                const panelY = canvas.height / 2 - panelH / 2 - 10 * scale
+
+                // Panel background
+                ctx.fillStyle = 'rgba(10, 10, 25, 0.95)'
+                ctx.strokeStyle = '#ff00ff'
+                ctx.lineWidth = 2 * scale
+                ctx.beginPath()
+                ctx.roundRect(panelX, panelY, panelW, panelH, 12 * scale)
+                ctx.fill()
+                ctx.stroke()
+
+                // Glow border
+                ctx.shadowColor = '#ff00ff'
+                ctx.shadowBlur = 15 * scale
+                ctx.beginPath()
+                ctx.roundRect(panelX, panelY, panelW, panelH, 12 * scale)
+                ctx.stroke()
+                ctx.shadowBlur = 0
+
+                // GAME OVER title
+                ctx.fillStyle = '#ff0066'
+                ctx.shadowColor = '#ff0066'
+                ctx.shadowBlur = 10 * scale
+                ctx.font = `bold ${28 * scale}px monospace`
+                ctx.textAlign = 'center'
+                ctx.fillText('GAME OVER', centerX, panelY + 35 * scale)
+                ctx.shadowBlur = 0
+
+                // Current score
+                ctx.fillStyle = '#00ffff'
+                ctx.shadowColor = '#00ffff'
+                ctx.shadowBlur = 8 * scale
+                ctx.font = `bold ${20 * scale}px monospace`
+                ctx.fillText(`SCORE: ${score}`, centerX, panelY + 65 * scale)
+                ctx.shadowBlur = 0
+
+                // Divider
+                ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)'
+                ctx.lineWidth = 1 * scale
+                ctx.beginPath()
+                ctx.moveTo(panelX + 20 * scale, panelY + 80 * scale)
+                ctx.lineTo(panelX + panelW - 20 * scale, panelY + 80 * scale)
+                ctx.stroke()
+
+                // HIGH SCORES header
+                ctx.fillStyle = '#ff00ff'
+                ctx.font = `bold ${14 * scale}px monospace`
+                ctx.fillText('TOP 10 HIGH SCORES', centerX, panelY + 100 * scale)
+
+                // Score list
+                const listTop = panelY + 120 * scale
+                const lineH = 22 * scale
+                const scores = highScores
+                for (let i = 0; i < MAX_HIGH_SCORES; i++) {
+                    const y = listTop + i * lineH
+                    const s = scores[i]
+                    const rank = `${i + 1}.`
+                    const isCurrentScore = s === score && i === scores.indexOf(score)
+
+                    if (s !== undefined) {
+                        // Highlight if this is the current score
+                        if (isCurrentScore) {
+                            ctx.fillStyle = 'rgba(0, 255, 255, 0.1)'
+                            ctx.beginPath()
+                            ctx.roundRect(panelX + 15 * scale, y - 12 * scale, panelW - 30 * scale, lineH, 4 * scale)
+                            ctx.fill()
+                            ctx.fillStyle = '#00ffff'
+                            ctx.font = `bold ${13 * scale}px monospace`
+                        } else {
+                            ctx.fillStyle = i < 3 ? '#ffd700' : '#888'
+                            ctx.font = `${13 * scale}px monospace`
+                        }
+
+                        ctx.textAlign = 'left'
+                        ctx.fillText(rank, panelX + 25 * scale, y)
+                        ctx.textAlign = 'right'
+                        ctx.fillText(`${s}`, panelX + panelW - 25 * scale, y)
+                    } else {
+                        ctx.fillStyle = '#333'
+                        ctx.font = `${13 * scale}px monospace`
+                        ctx.textAlign = 'left'
+                        ctx.fillText(rank, panelX + 25 * scale, y)
+                        ctx.textAlign = 'right'
+                        ctx.fillText('---', panelX + panelW - 25 * scale, y)
+                    }
+                }
+
+                // Restart prompt
+                ctx.textAlign = 'center'
+                ctx.fillStyle = '#aaa'
+                ctx.font = `${12 * scale}px monospace`
+                ctx.fillText('Press Space to Restart', centerX, panelY + panelH - 15 * scale)
             }
 
             animationFrameId.current = requestAnimationFrame(render)
