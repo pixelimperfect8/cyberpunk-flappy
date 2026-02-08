@@ -837,32 +837,41 @@ const GameEngine = () => {
                 beaconPositions.forEach((beacon, idx) => {
                     const beaconAngle = (globalTime * 0.03 + idx * 2.1) % (Math.PI * 2)
 
-                    ctx.fillStyle = '#ff0000'
-                    // Manual glow: larger faded circle behind beacon
-                    if (showGlow.current) {
-                        ctx.globalAlpha = 0.3
-                        ctx.beginPath()
-                        ctx.arc(beacon.x, beacon.y, 10 * scale, 0, Math.PI * 2)
-                        ctx.fill()
-                        ctx.globalAlpha = 1
-                    }
+                    // Drone drift - gentle movement around base position
+                    const driftX = Math.sin(globalTime * 0.02 + idx * 1.7) * 12 * scale
+                    const driftY = Math.cos(globalTime * 0.015 + idx * 2.3) * 8 * scale
+                    const bx = beacon.x + driftX
+                    const by = beacon.y + driftY
+
+                    // Radial gradient glow behind beacon
+                    const glowRadius = 14 * scale
+                    const glowGrad = ctx.createRadialGradient(bx, by, 0, bx, by, glowRadius)
+                    glowGrad.addColorStop(0, 'rgba(255, 0, 0, 0.8)')
+                    glowGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
+                    ctx.fillStyle = glowGrad
                     ctx.beginPath()
-                    ctx.arc(beacon.x, beacon.y, 4 * scale, 0, Math.PI * 2)
+                    ctx.arc(bx, by, glowRadius, 0, Math.PI * 2)
+                    ctx.fill()
+
+                    // Core dot
+                    ctx.fillStyle = '#ff0000'
+                    ctx.beginPath()
+                    ctx.arc(bx, by, 4 * scale, 0, Math.PI * 2)
                     ctx.fill()
 
                     const beamLength = 150 * scale
                     const beamWidth = 0.25
 
-                    const beamGrad = ctx.createRadialGradient(beacon.x, beacon.y, 0, beacon.x, beacon.y, beamLength)
+                    const beamGrad = ctx.createRadialGradient(bx, by, 0, bx, by, beamLength)
                     beamGrad.addColorStop(0, 'rgba(255, 50, 50, 0.4)')
                     beamGrad.addColorStop(0.3, 'rgba(255, 30, 30, 0.2)')
                     beamGrad.addColorStop(1, 'rgba(255, 0, 0, 0)')
 
                     ctx.fillStyle = beamGrad
                     ctx.beginPath()
-                    ctx.moveTo(beacon.x, beacon.y)
-                    ctx.lineTo(beacon.x + Math.cos(beaconAngle - beamWidth) * beamLength, beacon.y + Math.sin(beaconAngle - beamWidth) * beamLength)
-                    ctx.lineTo(beacon.x + Math.cos(beaconAngle + beamWidth) * beamLength, beacon.y + Math.sin(beaconAngle + beamWidth) * beamLength)
+                    ctx.moveTo(bx, by)
+                    ctx.arc(bx, by, beamLength, beaconAngle - beamWidth, beaconAngle + beamWidth)
+                    ctx.lineTo(bx, by) // Close the arc segment to the center
                     ctx.closePath()
                     ctx.fill()
                 })
@@ -1034,14 +1043,9 @@ const GameEngine = () => {
                     const tabletWidth = Math.abs(Math.cos(rot)) * tabletRadius + 4 * scale
                     const tabletHeight = tabletRadius
 
-                    // Green glow - manual (wider faded image behind)
+                    // Green pill - just draw sprite (glow ring below provides effect)
                     if (greenPillSprite.current) {
                         const spriteSize = tabletRadius * 2.5
-                        if (showGlow.current) {
-                            ctx.globalAlpha = 0.3
-                            ctx.drawImage(greenPillSprite.current, px - spriteSize * 0.65, py - spriteSize * 0.65, spriteSize * 1.3, spriteSize * 1.3)
-                            ctx.globalAlpha = 1
-                        }
                         ctx.drawImage(greenPillSprite.current, px - spriteSize / 2, py - spriteSize / 2, spriteSize, spriteSize)
                     } else {
                         // Fallback circle
@@ -1093,14 +1097,9 @@ const GameEngine = () => {
                     const bpWidth = Math.abs(Math.cos(bpRot)) * bpRadius + 4 * scale
                     const bpHeight = bpRadius
 
-                    // Blue glow - manual
+                    // Blue pill - just draw sprite (glow ring below provides effect)
                     if (bluePillSprite.current) {
                         const spriteSize = bpRadius * 2.5
-                        if (showGlow.current) {
-                            ctx.globalAlpha = 0.3
-                            ctx.drawImage(bluePillSprite.current, bpx - spriteSize * 0.65, bpy - spriteSize * 0.65, spriteSize * 1.3, spriteSize * 1.3)
-                            ctx.globalAlpha = 1
-                        }
                         ctx.drawImage(bluePillSprite.current, bpx - spriteSize / 2, bpy - spriteSize / 2, spriteSize, spriteSize)
                     } else {
                         // Fallback circle
@@ -1155,16 +1154,11 @@ const GameEngine = () => {
                     const ppy = poster.current.y
                     const posterSize = 60 * scale
 
-                    // Orange glow - manual
+                    // Poster - just draw sprite (glow ring below provides effect)
                     if (posterSprite.current) {
                         ctx.save()
                         ctx.translate(ppx, ppy)
                         ctx.rotate(poster.current.rotation)
-                        if (showGlow.current) {
-                            ctx.globalAlpha = 0.3
-                            ctx.drawImage(posterSprite.current, -posterSize * 0.65, -posterSize * 0.65, posterSize * 1.3, posterSize * 1.3)
-                            ctx.globalAlpha = 1
-                        }
                         ctx.drawImage(posterSprite.current, -posterSize / 2, -posterSize / 2, posterSize, posterSize)
                         ctx.restore()
                     } else {
