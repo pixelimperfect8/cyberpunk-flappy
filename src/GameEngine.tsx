@@ -2,6 +2,43 @@
 
 const HIGH_SCORE_KEY = 'cyberpunk-flappy-highscores'
 const MAX_HIGH_SCORES = 10
+const SETTINGS_KEY = 'cyberpunk-flappy-settings'
+
+type GraphicsQuality = 'LOW' | 'MEDIUM' | 'HIGH' | 'ULTRA' | 'CUSTOM'
+type MenuScreen = 'MAIN' | 'OPTIONS'
+
+interface GraphicsSettings {
+    quality: GraphicsQuality
+    fog: boolean
+    skyline: boolean
+    beacons: boolean
+    flyingCars: boolean
+    glow: boolean
+    particles: boolean
+    weatherFX: boolean
+    birdGlow: boolean
+    particleMultiplier: number
+}
+
+const GRAPHICS_PRESETS: Record<Exclude<GraphicsQuality, 'CUSTOM'>, Omit<GraphicsSettings, 'quality'>> = {
+    LOW: { fog: false, skyline: false, beacons: false, flyingCars: false, glow: false, particles: false, weatherFX: true, birdGlow: false, particleMultiplier: 0.5 },
+    MEDIUM: { fog: false, skyline: true, beacons: true, flyingCars: false, glow: true, particles: true, weatherFX: true, birdGlow: false, particleMultiplier: 1 },
+    HIGH: { fog: true, skyline: true, beacons: true, flyingCars: true, glow: true, particles: true, weatherFX: true, birdGlow: false, particleMultiplier: 1 },
+    ULTRA: { fog: true, skyline: true, beacons: true, flyingCars: true, glow: true, particles: true, weatherFX: true, birdGlow: true, particleMultiplier: 2 },
+}
+
+const MENU_ITEMS_MAIN = ['START', 'OPTIONS'] as const
+
+const loadSettings = (): GraphicsSettings | null => {
+    try {
+        const data = localStorage.getItem(SETTINGS_KEY)
+        return data ? JSON.parse(data) : null
+    } catch (_e) { return null }
+}
+
+const saveSettings = (settings: GraphicsSettings) => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+}
 
 const loadHighScores = (): number[] => {
     try {
@@ -28,6 +65,15 @@ const GameEngine = () => {
     const [isMuted, setIsMuted] = useState(false)
     const [highScores, setHighScores] = useState<number[]>(loadHighScores())
     const scoreSaved = useRef(false)
+
+    // Menu system
+    const [menuScreen, setMenuScreen] = useState<MenuScreen>('MAIN')
+    const selectedMenuItem = useRef(0)
+    const mouseMenuItem = useRef(-1) // -1 = no hover
+
+    // Graphics quality system
+    const savedSettings = useRef(loadSettings())
+    const [graphicsQuality, setGraphicsQuality] = useState<GraphicsQuality>(savedSettings.current?.quality || 'HIGH')
 
     // Performance: offscreen canvas for background caching
     const bgCanvas = useRef<HTMLCanvasElement | null>(null)
@@ -145,13 +191,15 @@ const GameEngine = () => {
     const godMode = useRef(false)
 
     // Graphics toggles (dev mode)
-    const showFog = useRef(true)
-    const showBeacons = useRef(true)
-    const showFlyingCars = useRef(true)
-    const showGlow = useRef(true)
-    const showParticles = useRef(true)
-    const showSkyline = useRef(true)
-    const showWeatherFX = useRef(true)
+    const showFog = useRef(savedSettings.current?.fog ?? true)
+    const showBeacons = useRef(savedSettings.current?.beacons ?? true)
+    const showFlyingCars = useRef(savedSettings.current?.flyingCars ?? true)
+    const showGlow = useRef(savedSettings.current?.glow ?? true)
+    const showParticles = useRef(savedSettings.current?.particles ?? true)
+    const showSkyline = useRef(savedSettings.current?.skyline ?? true)
+    const showWeatherFX = useRef(savedSettings.current?.weatherFX ?? true)
+    const showBirdGlow = useRef(savedSettings.current?.birdGlow ?? false)
+    const particleMultiplier = useRef(savedSettings.current?.particleMultiplier ?? 1)
 
     // Fullscreen & mobile view
     const [isFullscreen, setIsFullscreen] = useState(false)
@@ -396,6 +444,39 @@ const GameEngine = () => {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [])
 
+    // Apply a graphics preset to all refs and save to localStorage
+    const applyGraphicsPreset = (quality: Exclude<GraphicsQuality, 'CUSTOM'>) => {
+        const preset = GRAPHICS_PRESETS[quality]
+        showFog.current = preset.fog
+        showSkyline.current = preset.skyline
+        showBeacons.current = preset.beacons
+        showFlyingCars.current = preset.flyingCars
+        showGlow.current = preset.glow
+        showParticles.current = preset.particles
+        showWeatherFX.current = preset.weatherFX
+        showBirdGlow.current = preset.birdGlow
+        particleMultiplier.current = preset.particleMultiplier
+        bgFrameCounter.current = 0
+        setGraphicsQuality(quality)
+        saveSettings({ quality, ...preset })
+    }
+
+    const saveCurrentSettings = () => {
+        const settings: GraphicsSettings = {
+            quality: graphicsQuality,
+            fog: showFog.current,
+            skyline: showSkyline.current,
+            beacons: showBeacons.current,
+            flyingCars: showFlyingCars.current,
+            glow: showGlow.current,
+            particles: showParticles.current,
+            weatherFX: showWeatherFX.current,
+            birdGlow: showBirdGlow.current,
+            particleMultiplier: particleMultiplier.current,
+        }
+        saveSettings(settings)
+    }
+
     const resetGame = () => {
         const scale = getScale()
         birdY.current = 300 * scale
@@ -457,6 +538,64 @@ const GameEngine = () => {
         }
     }
 
+    const OPTIONS_ITEMS = ['QUALITY', 'Fog', 'Skyline', 'Beacons', 'Flying Cars', 'Glow Effects', 'Particles', 'Weather FX', 'Bird Glow', 'BACK'] as const
+    const QUALITY_ORDER: Exclude<GraphicsQuality, 'CUSTOM'>[] = ['LOW', 'MEDIUM', 'HIGH', 'ULTRA']
+
+    const handleMenuSelect = () => {
+        if (menuScreen === 'MAIN') {
+            const item = MENU_ITEMS_MAIN[selectedMenuItem.current]
+            if (item === 'START') {
+                startGame()
+            } else if (item === 'OPTIONS') {
+                setMenuScreen('OPTIONS')
+                selectedMenuItem.current = 0
+            }
+        } else if (menuScreen === 'OPTIONS') {
+            const item = OPTIONS_ITEMS[selectedMenuItem.current]
+            if (item === 'BACK') {
+                setMenuScreen('MAIN')
+                selectedMenuItem.current = 1 // highlight OPTIONS
+            } else if (item === 'QUALITY') {
+                // Cycle forward through presets on Enter
+                const idx = QUALITY_ORDER.indexOf(graphicsQuality as Exclude<GraphicsQuality, 'CUSTOM'>)
+                const next = QUALITY_ORDER[(idx + 1) % QUALITY_ORDER.length]
+                applyGraphicsPreset(next)
+            } else {
+                // Toggle individual setting
+                toggleOptionItem(item)
+            }
+        }
+    }
+
+    const toggleOptionItem = (item: string) => {
+        switch (item) {
+            case 'Fog': showFog.current = !showFog.current; bgFrameCounter.current = 0; break
+            case 'Skyline': showSkyline.current = !showSkyline.current; break
+            case 'Beacons': showBeacons.current = !showBeacons.current; break
+            case 'Flying Cars': showFlyingCars.current = !showFlyingCars.current; break
+            case 'Glow Effects': showGlow.current = !showGlow.current; break
+            case 'Particles': showParticles.current = !showParticles.current; break
+            case 'Weather FX': showWeatherFX.current = !showWeatherFX.current; break
+            case 'Bird Glow': showBirdGlow.current = !showBirdGlow.current; break
+        }
+        setGraphicsQuality('CUSTOM')
+        saveCurrentSettings()
+    }
+
+    const getOptionValue = (item: string): boolean => {
+        switch (item) {
+            case 'Fog': return showFog.current
+            case 'Skyline': return showSkyline.current
+            case 'Beacons': return showBeacons.current
+            case 'Flying Cars': return showFlyingCars.current
+            case 'Glow Effects': return showGlow.current
+            case 'Particles': return showParticles.current
+            case 'Weather FX': return showWeatherFX.current
+            case 'Bird Glow': return showBirdGlow.current
+            default: return false
+        }
+    }
+
     const jump = () => {
         if (gameState === 'PLAYING') {
             const scale = getScale()
@@ -475,7 +614,9 @@ const GameEngine = () => {
                     projectiles.current.push({ x: 80 * scale, y: birdY.current + 15 * scale })
                 }
             }
-        } else if (gameState === 'START' || gameState === 'GAME_OVER') {
+        } else if (gameState === 'START') {
+            handleMenuSelect()
+        } else if (gameState === 'GAME_OVER') {
             startGame()
         } else if (gameState === 'PAUSED') {
             setGameState('PLAYING')
@@ -492,17 +633,57 @@ const GameEngine = () => {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === 'Space' || e.code === 'ArrowUp') {
-                e.preventDefault()
-                jump()
-            } else if (e.code === 'Escape' || e.code === 'Enter') {
-                e.preventDefault()
-                togglePause()
+            if (gameState === 'START') {
+                // Menu navigation
+                if (e.code === 'ArrowUp') {
+                    e.preventDefault()
+                    const maxItems = menuScreen === 'MAIN' ? MENU_ITEMS_MAIN.length : OPTIONS_ITEMS.length
+                    selectedMenuItem.current = (selectedMenuItem.current - 1 + maxItems) % maxItems
+                } else if (e.code === 'ArrowDown') {
+                    e.preventDefault()
+                    const maxItems = menuScreen === 'MAIN' ? MENU_ITEMS_MAIN.length : OPTIONS_ITEMS.length
+                    selectedMenuItem.current = (selectedMenuItem.current + 1) % maxItems
+                } else if (e.code === 'ArrowLeft' && menuScreen === 'OPTIONS' && selectedMenuItem.current === 0) {
+                    e.preventDefault()
+                    const idx = QUALITY_ORDER.indexOf(graphicsQuality as Exclude<GraphicsQuality, 'CUSTOM'>)
+                    const prev = QUALITY_ORDER[(idx - 1 + QUALITY_ORDER.length) % QUALITY_ORDER.length]
+                    applyGraphicsPreset(prev)
+                } else if (e.code === 'ArrowRight' && menuScreen === 'OPTIONS' && selectedMenuItem.current === 0) {
+                    e.preventDefault()
+                    const idx = QUALITY_ORDER.indexOf(graphicsQuality as Exclude<GraphicsQuality, 'CUSTOM'>)
+                    const next = QUALITY_ORDER[(idx + 1) % QUALITY_ORDER.length]
+                    applyGraphicsPreset(next)
+                } else if (e.code === 'Space' || e.code === 'Enter') {
+                    e.preventDefault()
+                    handleMenuSelect()
+                } else if (e.code === 'Escape' && menuScreen === 'OPTIONS') {
+                    e.preventDefault()
+                    setMenuScreen('MAIN')
+                    selectedMenuItem.current = 1
+                }
+            } else if (gameState === 'PLAYING') {
+                if (e.code === 'Space' || e.code === 'ArrowUp') {
+                    e.preventDefault()
+                    jump()
+                } else if (e.code === 'Escape' || e.code === 'Enter') {
+                    e.preventDefault()
+                    togglePause()
+                }
+            } else if (gameState === 'PAUSED') {
+                if (e.code === 'Escape' || e.code === 'Enter') {
+                    e.preventDefault()
+                    togglePause()
+                }
+            } else if (gameState === 'GAME_OVER') {
+                if (e.code === 'Space' || e.code === 'Enter') {
+                    e.preventDefault()
+                    startGame()
+                }
             }
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [gameState, canvasSize])
+    }, [gameState, canvasSize, menuScreen, graphicsQuality])
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -934,13 +1115,15 @@ const GameEngine = () => {
             ctx.translate(birdCenterX, birdCenterY)
             ctx.rotate(birdRotation.current)
 
-            // Apply glow effects
-            if (bluePillActive.current) {
-                ctx.shadowColor = '#0088ff'
-                ctx.shadowBlur = 20 * scale
-            } else if (powerUpActive.current) {
-                ctx.shadowColor = '#00ff00'
-                ctx.shadowBlur = 20 * scale
+            // Apply glow effects (gated behind birdGlow setting - Ultra only by default)
+            if (showBirdGlow.current) {
+                if (bluePillActive.current) {
+                    ctx.shadowColor = '#0088ff'
+                    ctx.shadowBlur = 20 * scale
+                } else if (powerUpActive.current) {
+                    ctx.shadowColor = '#00ff00'
+                    ctx.shadowBlur = 20 * scale
+                }
             }
 
             // Draw the sprite or fallback to colored square
@@ -948,8 +1131,10 @@ const GameEngine = () => {
                 // Poster mega mode - use dicky_alt2!
                 const spriteW = scaledBirdSize * 3.5
                 const spriteH = scaledBirdSize * 2.5
-                ctx.shadowColor = '#ff8800'
-                ctx.shadowBlur = 25 * scale
+                if (showBirdGlow.current) {
+                    ctx.shadowColor = '#ff8800'
+                    ctx.shadowBlur = 25 * scale
+                }
                 ctx.drawImage(dickyAlt2.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
                 ctx.shadowBlur = 0
             } else if (bluePillActive.current && dickyBigSprite.current) {
@@ -2014,11 +2199,158 @@ const GameEngine = () => {
                     }
                 }
             } else if (gameState === 'START') {
-                ctx.fillStyle = 'white'
-                ctx.font = `${30 * scale}px Arial`
-                ctx.fillText('Click to Start', canvas.width / 2 - 80 * scale, canvas.height / 2)
-                ctx.font = `${20 * scale}px Arial`
-                ctx.fillText('or Press Space', canvas.width / 2 - 60 * scale, canvas.height / 2 + 30 * scale)
+                // Dark overlay
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.65)'
+                ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+                const centerX = canvas.width / 2
+                const active = mouseMenuItem.current >= 0 ? mouseMenuItem.current : selectedMenuItem.current
+
+                if (menuScreen === 'MAIN') {
+                    // === MAIN MENU ===
+                    // Game title
+                    ctx.textAlign = 'center'
+                    ctx.fillStyle = '#00ffff'
+                    ctx.font = `bold ${32 * scale}px monospace`
+                    ctx.fillText("DICKY'S", centerX, canvas.height * 0.3)
+                    ctx.fillStyle = '#ff00ff'
+                    ctx.font = `bold ${38 * scale}px monospace`
+                    ctx.fillText('ESCAPE', centerX, canvas.height * 0.3 + 42 * scale)
+
+                    // Subtitle
+                    ctx.fillStyle = '#888'
+                    ctx.font = `${11 * scale}px monospace`
+                    ctx.fillText('A Cyberpunk Flappy Adventure', centerX, canvas.height * 0.3 + 65 * scale)
+
+                    // Menu items
+                    const menuY = canvas.height * 0.55
+                    const itemH = 45 * scale
+
+                    for (let i = 0; i < MENU_ITEMS_MAIN.length; i++) {
+                        const y = menuY + i * itemH
+                        const isActive = i === active
+                        const label = MENU_ITEMS_MAIN[i]
+
+                        if (isActive) {
+                            // Highlight bar
+                            ctx.fillStyle = 'rgba(0, 255, 255, 0.1)'
+                            ctx.beginPath()
+                            ctx.roundRect(centerX - 100 * scale, y - 16 * scale, 200 * scale, 34 * scale, 6 * scale)
+                            ctx.fill()
+                            ctx.strokeStyle = '#00ffff'
+                            ctx.lineWidth = 1.5 * scale
+                            ctx.stroke()
+
+                            ctx.fillStyle = '#00ffff'
+                            ctx.font = `bold ${20 * scale}px monospace`
+                        } else {
+                            ctx.fillStyle = '#666'
+                            ctx.font = `${18 * scale}px monospace`
+                        }
+
+                        ctx.textAlign = 'center'
+                        ctx.fillText(label, centerX, y + 6 * scale)
+                    }
+
+                    // Navigation hint
+                    ctx.fillStyle = '#555'
+                    ctx.font = `${9 * scale}px monospace`
+                    ctx.fillText('↑/↓ Navigate  •  Enter/Space Select', centerX, canvas.height - 30 * scale)
+
+                } else if (menuScreen === 'OPTIONS') {
+                    // === OPTIONS SCREEN ===
+                    const panelW = 280 * scale
+                    const panelH = 380 * scale
+                    const panelX = centerX - panelW / 2
+                    const panelY = canvas.height / 2 - panelH / 2
+
+                    // Panel background
+                    ctx.fillStyle = 'rgba(10, 10, 25, 0.95)'
+                    ctx.beginPath()
+                    ctx.roundRect(panelX, panelY, panelW, panelH, 10 * scale)
+                    ctx.fill()
+                    ctx.strokeStyle = '#00ffff'
+                    ctx.lineWidth = 2 * scale
+                    ctx.stroke()
+
+                    // Header
+                    ctx.textAlign = 'center'
+                    ctx.fillStyle = '#00ffff'
+                    ctx.font = `bold ${18 * scale}px monospace`
+                    ctx.fillText('⚙ GRAPHICS', centerX, panelY + 30 * scale)
+
+                    // Divider
+                    ctx.strokeStyle = '#00ffff44'
+                    ctx.lineWidth = 1 * scale
+                    ctx.beginPath()
+                    ctx.moveTo(panelX + 20 * scale, panelY + 45 * scale)
+                    ctx.lineTo(panelX + panelW - 20 * scale, panelY + 45 * scale)
+                    ctx.stroke()
+
+                    const itemStartY = panelY + 65 * scale
+                    const itemH = 30 * scale
+
+                    for (let i = 0; i < OPTIONS_ITEMS.length; i++) {
+                        const y = itemStartY + i * itemH
+                        const isActive = i === active
+                        const item = OPTIONS_ITEMS[i]
+
+                        if (item === 'QUALITY') {
+                            // Quality preset selector
+                            if (isActive) {
+                                ctx.fillStyle = 'rgba(0, 255, 255, 0.08)'
+                                ctx.fillRect(panelX + 10 * scale, y - 10 * scale, panelW - 20 * scale, 24 * scale)
+                            }
+
+                            ctx.textAlign = 'left'
+                            ctx.fillStyle = isActive ? '#00ffff' : '#888'
+                            ctx.font = `bold ${12 * scale}px monospace`
+                            ctx.fillText('Quality:', panelX + 20 * scale, y + 4 * scale)
+
+                            ctx.textAlign = 'right'
+                            const qColor = graphicsQuality === 'ULTRA' ? '#ffd700' : graphicsQuality === 'HIGH' ? '#00ff88' : graphicsQuality === 'MEDIUM' ? '#ffaa00' : graphicsQuality === 'CUSTOM' ? '#ff00ff' : '#ff4444'
+                            ctx.fillStyle = qColor
+                            ctx.font = `bold ${13 * scale}px monospace`
+                            ctx.fillText(`◀ ${graphicsQuality} ▶`, panelX + panelW - 20 * scale, y + 4 * scale)
+
+                        } else if (item === 'BACK') {
+                            // Back button
+                            if (isActive) {
+                                ctx.fillStyle = 'rgba(255, 0, 102, 0.1)'
+                                ctx.fillRect(panelX + 10 * scale, y - 10 * scale, panelW - 20 * scale, 24 * scale)
+                            }
+                            ctx.textAlign = 'center'
+                            ctx.fillStyle = isActive ? '#ff0066' : '#666'
+                            ctx.font = `bold ${13 * scale}px monospace`
+                            ctx.fillText('← BACK', centerX, y + 4 * scale)
+
+                        } else {
+                            // Toggle item
+                            const isOn = getOptionValue(item)
+
+                            if (isActive) {
+                                ctx.fillStyle = 'rgba(0, 255, 255, 0.06)'
+                                ctx.fillRect(panelX + 10 * scale, y - 10 * scale, panelW - 20 * scale, 24 * scale)
+                            }
+
+                            ctx.textAlign = 'left'
+                            ctx.fillStyle = isActive ? '#fff' : '#999'
+                            ctx.font = `${12 * scale}px monospace`
+                            ctx.fillText(item, panelX + 20 * scale, y + 4 * scale)
+
+                            ctx.textAlign = 'right'
+                            ctx.fillStyle = isOn ? '#00ff88' : '#ff4444'
+                            ctx.font = `bold ${12 * scale}px monospace`
+                            ctx.fillText(isOn ? 'ON' : 'OFF', panelX + panelW - 20 * scale, y + 4 * scale)
+                        }
+                    }
+
+                    // Navigation hint
+                    ctx.textAlign = 'center'
+                    ctx.fillStyle = '#555'
+                    ctx.font = `${8 * scale}px monospace`
+                    ctx.fillText('↑/↓ Navigate  •  ←/→ Preset  •  Enter Toggle  •  Esc Back', centerX, panelY + panelH - 10 * scale)
+                }
             } else if (gameState === 'PAUSED') {
                 // Draw pipes in background
                 pipes.current.forEach(p => {
@@ -2161,7 +2493,7 @@ const GameEngine = () => {
         return () => {
             cancelAnimationFrame(animationFrameId.current)
         }
-    }, [gameState, score, canvasSize])
+    }, [gameState, score, canvasSize, menuScreen, graphicsQuality])
 
     return (
         <div
@@ -2181,6 +2513,44 @@ const GameEngine = () => {
         >
             <canvas
                 ref={canvasRef}
+                onMouseMove={(e) => {
+                    if (gameState !== 'START') { mouseMenuItem.current = -1; return }
+                    const rect = canvasRef.current?.getBoundingClientRect()
+                    if (!rect) return
+                    const scaleX = canvasSize.width / rect.width
+                    const scaleY = canvasSize.height / rect.height
+                    const mx = (e.clientX - rect.left) * scaleX
+                    const my = (e.clientY - rect.top) * scaleY
+                    const s = canvasSize.height / 600
+
+                    if (menuScreen === 'MAIN') {
+                        const menuY = canvasSize.height * 0.55
+                        const itemH = 45 * s
+                        let found = -1
+                        for (let i = 0; i < MENU_ITEMS_MAIN.length; i++) {
+                            const y = menuY + i * itemH
+                            if (my >= y - 16 * s && my <= y + 18 * s && mx >= canvasSize.width / 2 - 100 * s && mx <= canvasSize.width / 2 + 100 * s) {
+                                found = i; break
+                            }
+                        }
+                        mouseMenuItem.current = found
+                    } else if (menuScreen === 'OPTIONS') {
+                        const panelW = 280 * s
+                        const panelX = canvasSize.width / 2 - panelW / 2
+                        const panelY = canvasSize.height / 2 - 190 * s
+                        const itemStartY = panelY + 65 * s
+                        const itemH = 30 * s
+                        let found = -1
+                        for (let i = 0; i < OPTIONS_ITEMS.length; i++) {
+                            const y = itemStartY + i * itemH
+                            if (my >= y - 10 * s && my <= y + 14 * s && mx >= panelX + 10 * s && mx <= panelX + panelW - 10 * s) {
+                                found = i; break
+                            }
+                        }
+                        mouseMenuItem.current = found
+                    }
+                }}
+                onMouseLeave={() => { mouseMenuItem.current = -1 }}
                 width={canvasSize.width}
                 height={canvasSize.height}
                 style={{
