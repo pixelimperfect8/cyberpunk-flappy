@@ -195,7 +195,8 @@ const GameEngine = () => {
     const BOSS_MESSAGES = [
         "I hope you enjoyed your little headstart, Dicky.",
         "But it's over now.",
-        "I'm coming for you."
+        "I'm coming for you.",
+        "Level 2 starts NOW."
     ]
     const BOSS_GLITCH_DURATION = 3000 // 3 seconds of glitching
     const BOSS_MESSAGE_CHAR_SPEED = 40 // ms per character (typewriter)
@@ -1739,16 +1740,16 @@ const GameEngine = () => {
                 }
 
                 // === VILLAIN TAUNT SYSTEM ===
-                // Trigger a new taunt every 5 score points
-                if (score > 0 && score % 5 === 0 && score !== lastTauntScore.current) {
+                // Trigger a new taunt every 10 score points (skip during boss intro)
+                if (score > 0 && score % 10 === 0 && score !== lastTauntScore.current && !bossIntroActive.current) {
                     currentTaunt.current = TAUNT_MESSAGES[Math.floor(Math.random() * TAUNT_MESSAGES.length)]
                     currentVillainIndex.current = Math.floor(Math.random() * VILLAIN_PATHS.length) // Pick random villain!
                     tauntEndTime.current = Date.now() + 3000 // Show for 3 seconds
                     lastTauntScore.current = score
                 }
 
-                // Draw taunt popup if active
-                if (currentTaunt.current && Date.now() < tauntEndTime.current) {
+                // Draw taunt popup if active (hide during boss intro)
+                if (currentTaunt.current && Date.now() < tauntEndTime.current && !bossIntroActive.current) {
                     const tauntAlpha = Math.min(1, (tauntEndTime.current - Date.now()) / 500) // Fade out
                     ctx.globalAlpha = tauntAlpha
 
@@ -2174,22 +2175,29 @@ const GameEngine = () => {
                 width={canvasSize.width}
                 height={canvasSize.height}
                 style={{
-                    border: isFullscreen ? 'none' : '2px solid #00ffff',
+                    border: isFullscreen ? 'none' : `2px solid ${score >= LEVEL_2_SCORE ? '#ffff00' : '#00ffff'}`,
                     borderRadius: isFullscreen ? '0' : '8px',
-                    boxShadow: isFullscreen ? 'none' : '0 0 30px rgba(0, 255, 255, 0.3)'
+                    boxShadow: isFullscreen ? 'none' : `0 0 30px ${score >= LEVEL_2_SCORE ? 'rgba(255, 255, 0, 0.3)' : 'rgba(0, 255, 255, 0.3)'}`
                 }}
             />
-            <div style={{ position: 'absolute', top: 20, color: '#00ffff', fontSize: `${28 * (canvasSize.height / 600)}px`, fontWeight: 'bold', textShadow: '0 0 10px #00ffff' }}>
-                {score}
-            </div>
+            {(() => {
+                const uiColor = score >= LEVEL_2_SCORE ? '#ffff00' : '#00ffff'
+                return (
+                    <>
+                        <div style={{ position: 'absolute', top: 20, color: uiColor, fontSize: `${28 * (canvasSize.height / 600)}px`, fontWeight: 'bold', textShadow: `0 0 10px ${uiColor}` }}>
+                            {score}
+                        </div>
+                    </>
+                )
+            })()}
             <button
                 onClick={toggleMute}
                 style={{
                     position: 'absolute',
                     top: 20,
                     right: 20,
-                    background: 'rgba(0, 255, 255, 0.1)',
-                    border: '2px solid #00ffff',
+                    background: `rgba(${score >= LEVEL_2_SCORE ? '255, 255, 0' : '0, 255, 255'}, 0.1)`,
+                    border: `2px solid ${score >= LEVEL_2_SCORE ? '#ffff00' : '#00ffff'}`,
                     borderRadius: '50%',
                     width: 44,
                     height: 44,
