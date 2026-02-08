@@ -326,8 +326,8 @@ const GameEngine = () => {
         updateAudio()
     }, [gameState, isMuted, volume])
 
-    const toggleMute = (e: React.MouseEvent) => {
-        e.stopPropagation() // Prevent triggering jump
+    const toggleMute = (e?: React.MouseEvent) => {
+        if (e) e.stopPropagation() // Prevent triggering jump
         setIsMuted(prev => {
             if (audioRef.current) {
                 audioRef.current.muted = !prev
@@ -900,7 +900,7 @@ const GameEngine = () => {
                 const W = canvas.width
                 const H = canvas.height
                 const centerX = W / 2
-                const centerY = H / 2
+
 
                 const HORIZON_Y = H * 0.35 // Horizon line
                 const GROUND_Y = H - 20 * scale    // Ground level
