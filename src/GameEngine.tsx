@@ -192,13 +192,16 @@ const GameEngine = () => {
     const spotlightLastCheck = useRef(0) // timestamp of last 35s check
     const spotlightActive = useRef(false)
     const spotlightStartTime = useRef(0)
-    const spotlightAngle = useRef(0) // current sweep angle
-    const spotlightX = useRef(0) // origin X
-    const spotlightY = useRef(0) // origin Y  
+    const spotlightX = useRef(0) // circle center X
+    const spotlightY = useRef(0) // circle center Y
+    const spotlightVx = useRef(0) // wander velocity X
+    const spotlightVy = useRef(0) // wander velocity Y
     const spotlightLockedOn = useRef(false)
     const spotlightLockTime = useRef(0)
-    const SPOTLIGHT_DURATION = 6000 // total spotlight event ~6 seconds
+    const spotlightLeftBehind = useRef(false)
+    const SPOTLIGHT_DURATION = 7000 // total spotlight event ~7 seconds
     const SPOTLIGHT_LOCK_DELAY = 2500 // start locking after 2.5s
+    const SPOTLIGHT_LEAVE_DELAY = 4500 // stop following after 4.5s
 
     // Dev mode controls
     const [devModeOpen, setDevModeOpen] = useState(false)
@@ -1971,10 +1974,15 @@ const GameEngine = () => {
                                 // Activate spotlight!
                                 spotlightActive.current = true
                                 spotlightStartTime.current = now
-                                spotlightAngle.current = Math.random() * Math.PI * 2
-                                spotlightX.current = canvas.width * (0.3 + Math.random() * 0.4)
-                                spotlightY.current = -20
+                                // Start at random position on screen
+                                spotlightX.current = canvas.width * (0.2 + Math.random() * 0.6)
+                                spotlightY.current = canvas.height * (0.2 + Math.random() * 0.6)
+                                // Random wander velocity
+                                const wanderAngle = Math.random() * Math.PI * 2
+                                spotlightVx.current = Math.cos(wanderAngle) * 1.5 * scale
+                                spotlightVy.current = Math.sin(wanderAngle) * 1.2 * scale
                                 spotlightLockedOn.current = false
+                                spotlightLeftBehind.current = false
                             }
                         }
                     }
@@ -1984,64 +1992,88 @@ const GameEngine = () => {
                         if (elapsed > SPOTLIGHT_DURATION) {
                             spotlightActive.current = false
                         } else {
-                            const fadeIn = Math.min(1, elapsed / 500)
-                            const fadeOut = elapsed > SPOTLIGHT_DURATION - 800 ? Math.max(0, (SPOTLIGHT_DURATION - elapsed) / 800) : 1
+                            const fadeIn = Math.min(1, elapsed / 600)
+                            const fadeOut = elapsed > SPOTLIGHT_DURATION - 1000 ? Math.max(0, (SPOTLIGHT_DURATION - elapsed) / 1000) : 1
                             const fade = fadeIn * fadeOut
 
-                            // Sweeping motion
+                            const birdCenterX = scaledBirdX + scaledBirdSize / 2
+                            const birdCenterY = birdY.current + scaledBirdSize / 2
+
+                            // Phase 1: Wander (0 - 2.5s)
                             if (!spotlightLockedOn.current && elapsed > SPOTLIGHT_LOCK_DELAY) {
                                 spotlightLockedOn.current = true
                                 spotlightLockTime.current = now
                             }
 
-                            let targetAngle: number
-                            if (spotlightLockedOn.current) {
-                                // Lock onto bird with smooth lerp
-                                const lockProgress = Math.min(1, (now - spotlightLockTime.current) / 800)
-                                const birdAngle = Math.atan2(
-                                    birdY.current + scaledBirdSize / 2 - spotlightY.current,
-                                    scaledBirdX + scaledBirdSize / 2 - spotlightX.current
-                                )
-                                targetAngle = spotlightAngle.current + (birdAngle - spotlightAngle.current) * lockProgress
-                            } else {
-                                // Sweep around
-                                targetAngle = spotlightAngle.current + 0.015
+                            // Phase 3: Left behind (after 4.5s)
+                            if (spotlightLockedOn.current && !spotlightLeftBehind.current && elapsed > SPOTLIGHT_LEAVE_DELAY) {
+                                spotlightLeftBehind.current = true
                             }
-                            spotlightAngle.current = targetAngle
 
-                            // Draw spotlight beam (conical)
-                            const beamLength = canvas.height * 1.3
-                            const coneWidth = 0.15 // radians
+                            if (spotlightLeftBehind.current) {
+                                // Stay where it is — Dicky moves away
+                                // Slight drift downward to feel natural
+                                spotlightY.current += 0.3 * scale
+                            } else if (spotlightLockedOn.current) {
+                                // Smoothly lerp toward Dicky
+                                const lockProgress = Math.min(1, (now - spotlightLockTime.current) / 800)
+                                const lerp = 0.04 + lockProgress * 0.08
+                                spotlightX.current += (birdCenterX - spotlightX.current) * lerp
+                                spotlightY.current += (birdCenterY - spotlightY.current) * lerp
+                            } else {
+                                // Wander around
+                                spotlightX.current += spotlightVx.current
+                                spotlightY.current += spotlightVy.current
+                                // Gentle direction changes
+                                spotlightVx.current += (Math.random() - 0.5) * 0.15 * scale
+                                spotlightVy.current += (Math.random() - 0.5) * 0.15 * scale
+                                // Keep in bounds
+                                if (spotlightX.current < canvas.width * 0.1) spotlightVx.current += 0.3 * scale
+                                if (spotlightX.current > canvas.width * 0.9) spotlightVx.current -= 0.3 * scale
+                                if (spotlightY.current < canvas.height * 0.1) spotlightVy.current += 0.3 * scale
+                                if (spotlightY.current > canvas.height * 0.9) spotlightVy.current -= 0.3 * scale
+                            }
 
+                            // Draw overexposure circle using additive blending
+                            const radius = 80 * scale
                             ctx.save()
-                            const grad = ctx.createRadialGradient(
-                                spotlightX.current, spotlightY.current, 0,
-                                spotlightX.current, spotlightY.current, beamLength
-                            )
-                            grad.addColorStop(0, `rgba(255, 255, 255, ${0.18 * fade})`)
-                            grad.addColorStop(0.3, `rgba(200, 220, 255, ${0.08 * fade})`)
-                            grad.addColorStop(1, 'rgba(200, 220, 255, 0)')
+                            ctx.globalCompositeOperation = 'lighter'
 
-                            ctx.fillStyle = grad
+                            // Outer soft glow
+                            const outerGrad = ctx.createRadialGradient(
+                                spotlightX.current, spotlightY.current, 0,
+                                spotlightX.current, spotlightY.current, radius * 1.8
+                            )
+                            outerGrad.addColorStop(0, `rgba(200, 220, 255, ${0.15 * fade})`)
+                            outerGrad.addColorStop(0.4, `rgba(180, 200, 240, ${0.08 * fade})`)
+                            outerGrad.addColorStop(1, 'rgba(150, 180, 220, 0)')
+                            ctx.fillStyle = outerGrad
                             ctx.beginPath()
-                            ctx.moveTo(spotlightX.current, spotlightY.current)
-                            ctx.arc(spotlightX.current, spotlightY.current, beamLength,
-                                spotlightAngle.current - coneWidth,
-                                spotlightAngle.current + coneWidth)
-                            ctx.closePath()
+                            ctx.arc(spotlightX.current, spotlightY.current, radius * 1.8, 0, Math.PI * 2)
                             ctx.fill()
 
-                            // Bright center line
-                            ctx.globalAlpha = 0.12 * fade
-                            ctx.strokeStyle = '#ffffff'
-                            ctx.lineWidth = 2 * scale
-                            ctx.beginPath()
-                            ctx.moveTo(spotlightX.current, spotlightY.current)
-                            ctx.lineTo(
-                                spotlightX.current + Math.cos(spotlightAngle.current) * beamLength * 0.8,
-                                spotlightY.current + Math.sin(spotlightAngle.current) * beamLength * 0.8
+                            // Inner bright core
+                            const innerGrad = ctx.createRadialGradient(
+                                spotlightX.current, spotlightY.current, 0,
+                                spotlightX.current, spotlightY.current, radius
                             )
+                            innerGrad.addColorStop(0, `rgba(255, 255, 255, ${0.22 * fade})`)
+                            innerGrad.addColorStop(0.5, `rgba(220, 235, 255, ${0.12 * fade})`)
+                            innerGrad.addColorStop(1, 'rgba(200, 220, 255, 0)')
+                            ctx.fillStyle = innerGrad
+                            ctx.beginPath()
+                            ctx.arc(spotlightX.current, spotlightY.current, radius, 0, Math.PI * 2)
+                            ctx.fill()
+
+                            // Crisp edge ring
+                            ctx.globalCompositeOperation = 'source-over'
+                            ctx.globalAlpha = 0.08 * fade
+                            ctx.strokeStyle = '#ffffff'
+                            ctx.lineWidth = 1.5 * scale
+                            ctx.beginPath()
+                            ctx.arc(spotlightX.current, spotlightY.current, radius * 0.9, 0, Math.PI * 2)
                             ctx.stroke()
+
                             ctx.globalAlpha = 1
                             ctx.restore()
                         }
