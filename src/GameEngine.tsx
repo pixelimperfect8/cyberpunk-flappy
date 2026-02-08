@@ -2034,46 +2034,15 @@ const GameEngine = () => {
                                 if (spotlightY.current > canvas.height * 0.9) spotlightVy.current -= 0.3 * scale
                             }
 
-                            // Draw overexposure circle using additive blending
-                            const radius = 80 * scale
+                            // Draw solid overexposure circle — additive blend brightens everything underneath
+                            const radius = 85 * scale
                             ctx.save()
                             ctx.globalCompositeOperation = 'lighter'
-
-                            // Outer soft glow
-                            const outerGrad = ctx.createRadialGradient(
-                                spotlightX.current, spotlightY.current, 0,
-                                spotlightX.current, spotlightY.current, radius * 1.8
-                            )
-                            outerGrad.addColorStop(0, `rgba(200, 220, 255, ${0.15 * fade})`)
-                            outerGrad.addColorStop(0.4, `rgba(180, 200, 240, ${0.08 * fade})`)
-                            outerGrad.addColorStop(1, 'rgba(150, 180, 220, 0)')
-                            ctx.fillStyle = outerGrad
-                            ctx.beginPath()
-                            ctx.arc(spotlightX.current, spotlightY.current, radius * 1.8, 0, Math.PI * 2)
-                            ctx.fill()
-
-                            // Inner bright core
-                            const innerGrad = ctx.createRadialGradient(
-                                spotlightX.current, spotlightY.current, 0,
-                                spotlightX.current, spotlightY.current, radius
-                            )
-                            innerGrad.addColorStop(0, `rgba(255, 255, 255, ${0.22 * fade})`)
-                            innerGrad.addColorStop(0.5, `rgba(220, 235, 255, ${0.12 * fade})`)
-                            innerGrad.addColorStop(1, 'rgba(200, 220, 255, 0)')
-                            ctx.fillStyle = innerGrad
+                            ctx.globalAlpha = 0.28 * fade
+                            ctx.fillStyle = '#ffffff'
                             ctx.beginPath()
                             ctx.arc(spotlightX.current, spotlightY.current, radius, 0, Math.PI * 2)
                             ctx.fill()
-
-                            // Crisp edge ring
-                            ctx.globalCompositeOperation = 'source-over'
-                            ctx.globalAlpha = 0.08 * fade
-                            ctx.strokeStyle = '#ffffff'
-                            ctx.lineWidth = 1.5 * scale
-                            ctx.beginPath()
-                            ctx.arc(spotlightX.current, spotlightY.current, radius * 0.9, 0, Math.PI * 2)
-                            ctx.stroke()
-
                             ctx.globalAlpha = 1
                             ctx.restore()
                         }
