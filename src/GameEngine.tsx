@@ -288,6 +288,12 @@ const GameEngine = () => {
     const BOSS_MESSAGE_CHAR_SPEED = 40 // ms per character (typewriter)
     const BOSS_MESSAGE_PAUSE = 1200 // pause between messages
 
+    // Jump Hint Assets
+    const jumpHintDefault = useRef<HTMLImageElement | null>(null)
+    const jumpHintPressed = useRef<HTMLImageElement | null>(null)
+    const [isJumpPressed, setIsJumpPressed] = useState(false)
+    const jumpPressTimer = useRef<any>(null)
+
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const menuAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -521,6 +527,15 @@ const GameEngine = () => {
         const railcartImg = new Image()
         railcartImg.src = '/railcart.png'
         railcartImg.onload = () => { railcartSprite.current = railcartImg }
+
+        // Load Jump Hint Sprites
+        const imgJumpDefault = new Image()
+        imgJumpDefault.src = '/space-default.png'
+        imgJumpDefault.onload = () => { jumpHintDefault.current = imgJumpDefault }
+
+        const imgJumpPressed = new Image()
+        imgJumpPressed.src = '/space-pressed.png'
+        imgJumpPressed.onload = () => { jumpHintPressed.current = imgJumpPressed }
     }, [])
 
     // Dev mode keyboard listener
@@ -722,6 +737,14 @@ const GameEngine = () => {
             const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0
             const mobileSpeedMult = isMobile ? 1.3 : 1
             birdVelocity.current = LIFT * scale * mobileSpeedMult
+
+            // Visual Hint Feedback
+            setIsJumpPressed(true)
+            if (jumpPressTimer.current) clearTimeout(jumpPressTimer.current)
+            jumpPressTimer.current = setTimeout(() => setIsJumpPressed(false), 150)
+
+
+
             // Fire projectile if power-up is active
             if (powerUpActive.current || posterActive.current) {
                 if (posterActive.current) {
@@ -2610,6 +2633,20 @@ const GameEngine = () => {
                             setGameState('GAME_OVER')
                         }
                     }
+
+                    // === JUMP HINT UI ===
+                    if (gameState === 'PLAYING' && jumpHintDefault.current && jumpHintPressed.current) {
+                        const hintImg = isJumpPressed ? jumpHintPressed.current : jumpHintDefault.current
+                        const hintW = 120 * scale
+                        const hintH = hintW * (hintImg.height / hintImg.width)
+                        const hintX = centerX - hintW / 2
+                        const hintY = canvas.height - hintH - 10 * scale
+
+                        ctx.globalAlpha = 0.8
+                        ctx.drawImage(hintImg, hintX, hintY, hintW, hintH)
+                        ctx.globalAlpha = 1
+                    }
+
                 } else if (gameState === 'START') {
                     // Draw Background Image if loaded, otherwise dark fills
                     // Draw Logo
