@@ -799,14 +799,22 @@ const GameEngine = () => {
             ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y)
 
             ctx.strokeStyle = '#00ffff'
-            ctx.shadowColor = '#00ffff'
-            ctx.shadowBlur = 6 * scale
             ctx.lineWidth = 2 * scale
+            // Manual glow: wider faded line behind
+            if (showGlow.current) {
+                ctx.globalAlpha = 0.2
+                ctx.lineWidth = 8 * scale
+                ctx.beginPath()
+                ctx.moveTo(0, GROUND_Y)
+                ctx.lineTo(W, GROUND_Y)
+                ctx.stroke()
+                ctx.globalAlpha = 1
+                ctx.lineWidth = 2 * scale
+            }
             ctx.beginPath()
             ctx.moveTo(0, GROUND_Y)
             ctx.lineTo(W, GROUND_Y)
             ctx.stroke()
-            ctx.shadowBlur = 0
 
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)'
             ctx.lineWidth = scale
@@ -830,12 +838,17 @@ const GameEngine = () => {
                     const beaconAngle = (globalTime * 0.03 + idx * 2.1) % (Math.PI * 2)
 
                     ctx.fillStyle = '#ff0000'
-                    ctx.shadowColor = '#ff0000'
-                    ctx.shadowBlur = 10 * scale
+                    // Manual glow: larger faded circle behind beacon
+                    if (showGlow.current) {
+                        ctx.globalAlpha = 0.3
+                        ctx.beginPath()
+                        ctx.arc(beacon.x, beacon.y, 10 * scale, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = 1
+                    }
                     ctx.beginPath()
                     ctx.arc(beacon.x, beacon.y, 4 * scale, 0, Math.PI * 2)
                     ctx.fill()
-                    ctx.shadowBlur = 0
 
                     const beamLength = 150 * scale
                     const beamWidth = 0.25
@@ -1021,12 +1034,14 @@ const GameEngine = () => {
                     const tabletWidth = Math.abs(Math.cos(rot)) * tabletRadius + 4 * scale
                     const tabletHeight = tabletRadius
 
-                    // Green glow
-                    ctx.shadowColor = '#00ff00'
-                    ctx.shadowBlur = 15 * scale
-
+                    // Green glow - manual (wider faded image behind)
                     if (greenPillSprite.current) {
                         const spriteSize = tabletRadius * 2.5
+                        if (showGlow.current) {
+                            ctx.globalAlpha = 0.3
+                            ctx.drawImage(greenPillSprite.current, px - spriteSize * 0.65, py - spriteSize * 0.65, spriteSize * 1.3, spriteSize * 1.3)
+                            ctx.globalAlpha = 1
+                        }
                         ctx.drawImage(greenPillSprite.current, px - spriteSize / 2, py - spriteSize / 2, spriteSize, spriteSize)
                     } else {
                         // Fallback circle
@@ -1078,12 +1093,14 @@ const GameEngine = () => {
                     const bpWidth = Math.abs(Math.cos(bpRot)) * bpRadius + 4 * scale
                     const bpHeight = bpRadius
 
-                    // Blue glow
-                    ctx.shadowColor = '#0088ff'
-                    ctx.shadowBlur = 15 * scale
-
+                    // Blue glow - manual
                     if (bluePillSprite.current) {
                         const spriteSize = bpRadius * 2.5
+                        if (showGlow.current) {
+                            ctx.globalAlpha = 0.3
+                            ctx.drawImage(bluePillSprite.current, bpx - spriteSize * 0.65, bpy - spriteSize * 0.65, spriteSize * 1.3, spriteSize * 1.3)
+                            ctx.globalAlpha = 1
+                        }
                         ctx.drawImage(bluePillSprite.current, bpx - spriteSize / 2, bpy - spriteSize / 2, spriteSize, spriteSize)
                     } else {
                         // Fallback circle
@@ -1138,14 +1155,16 @@ const GameEngine = () => {
                     const ppy = poster.current.y
                     const posterSize = 60 * scale
 
-                    // Orange glow
-                    ctx.shadowColor = '#ff8800'
-                    ctx.shadowBlur = 20 * scale
-
+                    // Orange glow - manual
                     if (posterSprite.current) {
                         ctx.save()
                         ctx.translate(ppx, ppy)
                         ctx.rotate(poster.current.rotation)
+                        if (showGlow.current) {
+                            ctx.globalAlpha = 0.3
+                            ctx.drawImage(posterSprite.current, -posterSize * 0.65, -posterSize * 0.65, posterSize * 1.3, posterSize * 1.3)
+                            ctx.globalAlpha = 1
+                        }
                         ctx.drawImage(posterSprite.current, -posterSize / 2, -posterSize / 2, posterSize, posterSize)
                         ctx.restore()
                     } else {
@@ -1155,13 +1174,12 @@ const GameEngine = () => {
                         ctx.fill()
                     }
 
-                    // Glow ring
+                    // Glow ring - no shadowBlur
                     ctx.strokeStyle = '#ffaa33'
                     ctx.lineWidth = 2 * scale
                     ctx.beginPath()
                     ctx.arc(ppx, ppy, posterSize / 2 + 5 * scale, 0, Math.PI * 2)
                     ctx.stroke()
-                    ctx.shadowBlur = 0
 
                     // Collision detection
                     if (scaledBirdX < ppx + posterSize / 2 && scaledBirdX + scaledBirdSize > ppx - posterSize / 2 &&
@@ -1187,7 +1205,7 @@ const GameEngine = () => {
                 // Poster auto-fire stream
                 if (posterActive.current) {
                     posterAutoFireTimer.current++
-                    if (posterAutoFireTimer.current % 5 === 0) {
+                    if (posterAutoFireTimer.current % 5 === 0 && projectiles.current.length < 50) {
                         const angles = [-0.25, -0.12, 0, 0.12, 0.25]
                         for (const angle of angles) {
                             projectiles.current.push({
@@ -1230,9 +1248,11 @@ const GameEngine = () => {
                         if (!p.destroyed && proj.x + 15 * scale > p.x && proj.x < p.x + scaledPipeWidth) {
                             if (proj.y < p.topHeight) {
                                 p.destroyed = true
-                                projectiles.current.splice(i, 1)
-                                // Spawn explosion particles!
-                                for (let k = 0; k < 15; k++) {
+                                projectiles.current[i] = projectiles.current[projectiles.current.length - 1]
+                                projectiles.current.pop()
+                                // Spawn explosion particles (capped)
+                                const expCount = Math.min(15, 150 - explosionParticles.current.length)
+                                for (let k = 0; k < expCount; k++) {
                                     const angle = Math.random() * Math.PI * 2
                                     const speed = (3 + Math.random() * 5) * scale
                                     explosionParticles.current.push({
@@ -1250,9 +1270,11 @@ const GameEngine = () => {
                             }
                             if (proj.y > p.topHeight + scaledPipeGap) {
                                 p.destroyed = true
-                                projectiles.current.splice(i, 1)
-                                // Spawn explosion particles!
-                                for (let k = 0; k < 15; k++) {
+                                projectiles.current[i] = projectiles.current[projectiles.current.length - 1]
+                                projectiles.current.pop()
+                                // Spawn explosion particles (capped)
+                                const expCount2 = Math.min(15, 150 - explosionParticles.current.length)
+                                for (let k = 0; k < expCount2; k++) {
                                     const angle = Math.random() * Math.PI * 2
                                     const speed = (3 + Math.random() * 5) * scale
                                     explosionParticles.current.push({
@@ -1272,7 +1294,8 @@ const GameEngine = () => {
                     }
 
                     if (proj.x > canvas.width + 20 * scale) {
-                        projectiles.current.splice(i, 1)
+                        projectiles.current[i] = projectiles.current[projectiles.current.length - 1]
+                        projectiles.current.pop()
                     }
                 }
 
@@ -1285,7 +1308,8 @@ const GameEngine = () => {
                     p.life -= 0.03
 
                     if (p.life <= 0) {
-                        explosionParticles.current.splice(i, 1)
+                        explosionParticles.current[i] = explosionParticles.current[explosionParticles.current.length - 1]
+                        explosionParticles.current.pop()
                     } else if (showParticles.current) {
                         // Manual glow: larger faded circle behind particle
                         if (showGlow.current) {
@@ -1422,13 +1446,15 @@ const GameEngine = () => {
                             }
                             ctx.globalAlpha = 1
 
-                            // Danger edge glow (at gap edge)
+                            // Danger edge glow (manual - no shadowBlur, runs per pipe!)
                             const edgeY = isTop ? oy + oh : oy
-                            ctx.shadowColor = '#ff4400'
-                            ctx.shadowBlur = 8 * scale
-                            ctx.fillStyle = '#ff4400'
+                            if (showGlow.current) {
+                                ctx.globalAlpha = 0.25
+                                ctx.fillStyle = '#ff4400'
+                                ctx.fillRect(ox - 2 * scale, edgeY - (isTop ? 6 * scale : -3 * scale), ow + 4 * scale, 6 * scale)
+                                ctx.globalAlpha = 1
+                            }
                             ctx.fillRect(ox, edgeY - (isTop ? 3 * scale : 0), ow, 3 * scale)
-                            ctx.shadowBlur = 0
                         }
 
                         // Draw top obstacle
@@ -1482,20 +1508,18 @@ const GameEngine = () => {
                     }
 
                     if (p.x < -60 * scale) {
-                        pipes.current.splice(i, 1)
+                        pipes.current[i] = pipes.current[pipes.current.length - 1]
+                        pipes.current.pop()
                     }
                 }
 
                 if (powerUpActive.current) {
                     const timeLeft = Math.ceil((powerUpEndTime.current - Date.now()) / 1000)
                     ctx.fillStyle = '#00ff00'
-                    ctx.shadowColor = '#00ff00'
-                    ctx.shadowBlur = 8 * scale
                     ctx.font = `bold ${16 * scale}px monospace`
-                    ctx.fillText(`âš¡ POWER: ${timeLeft}s`, 10 * scale, 50 * scale)
+                    ctx.fillText(`⚡ POWER: ${timeLeft}s`, 10 * scale, 50 * scale)
                     ctx.font = `${12 * scale}px monospace`
                     ctx.fillText('(Jump to shoot!)', 10 * scale, 68 * scale)
-                    ctx.shadowBlur = 0
                 }
 
                 // === WEATHER SYSTEM ===
@@ -1510,7 +1534,7 @@ const GameEngine = () => {
 
                 if (acidRainActive && acidRainEnabled.current && !suppressRain) {
                     // Spawn new rain drops (slight diagonal for speed effect)
-                    if (Math.random() < 0.3) {
+                    if (Math.random() < 0.3 && rainDrops.current.length < 200) {
                         rainDrops.current.push({
                             x: Math.random() * (canvas.width + 50),  // Across the top
                             y: -10 - Math.random() * 30,
@@ -1559,13 +1583,15 @@ const GameEngine = () => {
                                     color: Math.random() > 0.5 ? '#88ff00' : '#aaff44'
                                 })
                             }
-                            rainDrops.current.splice(i, 1)
+                            rainDrops.current[i] = rainDrops.current[rainDrops.current.length - 1]
+                            rainDrops.current.pop()
                             continue
                         }
 
                         // Remove drops that are off screen (left edge or bottom)
                         if (drop.y > canvas.height || drop.x < -50) {
-                            rainDrops.current.splice(i, 1)
+                            rainDrops.current[i] = rainDrops.current[rainDrops.current.length - 1]
+                            rainDrops.current.pop()
                         }
                     }
 
@@ -1590,17 +1616,15 @@ const GameEngine = () => {
                         ctx.globalAlpha = 1
 
                         if (p.life <= 0) {
-                            splashParticles.current.splice(i, 1)
+                            splashParticles.current[i] = splashParticles.current[splashParticles.current.length - 1]
+                            splashParticles.current.pop()
                         }
                     }
 
-                    // Acid rain warning text
+                    // Acid rain warning text (no shadowBlur)
                     ctx.fillStyle = '#88ff00'
-                    ctx.shadowColor = '#88ff00'
-                    ctx.shadowBlur = 10 * scale
                     ctx.font = `bold ${12 * scale}px monospace`
                     ctx.fillText('ACID RAIN', canvas.width - 90 * scale, 30 * scale)
-                    ctx.shadowBlur = 0
                 }
 
                 // Still draw existing rain drops draining off during transition
@@ -1655,18 +1679,18 @@ const GameEngine = () => {
                         ctx.ellipse(sand.x, sand.y, sand.size * 2, sand.size, 0, 0, Math.PI * 2)
                         ctx.fill()
                         ctx.globalAlpha = 1
-                        if (sand.x > canvas.width + 50) sandParticles.current.splice(i, 1)
+                        if (sand.x > canvas.width + 50) {
+                            sandParticles.current[i] = sandParticles.current[sandParticles.current.length - 1]
+                            sandParticles.current.pop()
+                        }
                     }
 
                     // Pulsing warning
                     const pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7
                     ctx.globalAlpha = pulse
                     ctx.fillStyle = '#c4a84f'
-                    ctx.shadowColor = '#d4b86f'
-                    ctx.shadowBlur = 10 * scale
                     ctx.font = `bold ${12 * scale}px monospace`
                     ctx.fillText('SANDSTORM INCOMING', canvas.width - 160 * scale, 30 * scale)
-                    ctx.shadowBlur = 0
                     ctx.globalAlpha = 1
                 }
 
@@ -1690,7 +1714,7 @@ const GameEngine = () => {
                     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
                     // Spawn new sand particles (horizontal wind)
-                    if (Math.random() < 0.5) {
+                    if (Math.random() < 0.5 && sandParticles.current.length < 300) {
                         sandParticles.current.push({
                             x: -10 - Math.random() * 50,
                             y: Math.random() * canvas.height,
@@ -1725,18 +1749,16 @@ const GameEngine = () => {
 
                         // Remove particles that are off screen
                         if (sand.x > canvas.width + 50) {
-                            sandParticles.current.splice(i, 1)
+                            sandParticles.current[i] = sandParticles.current[sandParticles.current.length - 1]
+                            sandParticles.current.pop()
                         }
                     }
 
                     // Sandstorm active text with countdown
                     const sandTimeLeft = Math.ceil((sandstormEndTime.current - Date.now()) / 1000)
                     ctx.fillStyle = '#c4a84f'
-                    ctx.shadowColor = '#d4b86f'
-                    ctx.shadowBlur = 10 * scale
                     ctx.font = `bold ${12 * scale}px monospace`
                     ctx.fillText(`SANDSTORM ${sandTimeLeft}s`, canvas.width - 120 * scale, 30 * scale)
-                    ctx.shadowBlur = 0
                 }
 
                 // === VILLAIN TAUNT SYSTEM ===
@@ -1758,13 +1780,9 @@ const GameEngine = () => {
                     const faceX = 15 * scale
                     const faceY = canvas.height - faceSize - 60 * scale
 
-                    // Face border glow
-                    ctx.shadowColor = '#ff0066'
-                    ctx.shadowBlur = 15 * scale
                     ctx.strokeStyle = '#ff0066'
                     ctx.lineWidth = 3 * scale
                     ctx.strokeRect(faceX, faceY, faceSize, faceSize)
-                    ctx.shadowBlur = 0
 
                     // Draw villain face - use random villain from array
                     const villainImg = villainSprites.current[currentVillainIndex.current]
@@ -1800,8 +1818,6 @@ const GameEngine = () => {
 
                     // Taunt text
                     ctx.fillStyle = '#ff0066'
-                    ctx.shadowColor = '#ff0066'
-                    ctx.shadowBlur = 5 * scale
                     ctx.font = `bold ${11 * scale}px monospace`
                     ctx.textAlign = 'left'
 
@@ -1820,7 +1836,6 @@ const GameEngine = () => {
                         }
                     }
                     ctx.fillText(line.trim(), bubbleX + 10 * scale, y)
-                    ctx.shadowBlur = 0
                     ctx.globalAlpha = 1
                 } else if (Date.now() >= tauntEndTime.current) {
                     currentTaunt.current = null
