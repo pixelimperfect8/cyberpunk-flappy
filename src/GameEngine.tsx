@@ -288,11 +288,6 @@ const GameEngine = () => {
     const BOSS_MESSAGE_CHAR_SPEED = 40 // ms per character (typewriter)
     const BOSS_MESSAGE_PAUSE = 1200 // pause between messages
 
-    // Jump Hint Assets
-    const jumpHintDefault = useRef<HTMLImageElement | null>(null)
-    const jumpHintPressed = useRef<HTMLImageElement | null>(null)
-    const isJumpPressed = useRef(false)
-    const jumpPressTimer = useRef<any>(null)
 
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -528,14 +523,7 @@ const GameEngine = () => {
         railcartImg.src = '/railcart.png'
         railcartImg.onload = () => { railcartSprite.current = railcartImg }
 
-        // Load Jump Hint Sprites
-        const imgJumpDefault = new Image()
-        imgJumpDefault.src = '/space-default.png'
-        imgJumpDefault.onload = () => { jumpHintDefault.current = imgJumpDefault }
 
-        const imgJumpPressed = new Image()
-        imgJumpPressed.src = '/space-pressed.png'
-        imgJumpPressed.onload = () => { jumpHintPressed.current = imgJumpPressed }
     }, [])
 
     // Dev mode keyboard listener
@@ -738,10 +726,7 @@ const GameEngine = () => {
             const mobileSpeedMult = isMobile ? 1.3 : 1
             birdVelocity.current = LIFT * scale * mobileSpeedMult
 
-            // Visual Hint Feedback
-            isJumpPressed.current = true
-            if (jumpPressTimer.current) clearTimeout(jumpPressTimer.current)
-            jumpPressTimer.current = setTimeout(() => { isJumpPressed.current = false }, 150)
+
 
 
 
@@ -2634,19 +2619,6 @@ const GameEngine = () => {
                         }
                     }
 
-                    // === JUMP HINT UI ===
-                    if (gameState === 'PLAYING' && jumpHintDefault.current && jumpHintPressed.current) {
-                        const hintImg = isJumpPressed.current ? jumpHintPressed.current : jumpHintDefault.current
-                        const hintW = 120 * scale
-                        const hintH = hintW * (hintImg.height / hintImg.width)
-                        const hintX = centerX - hintW / 2
-                        // Moved up 12px (10 + 12 = 22)
-                        const hintY = canvas.height - hintH - 22 * scale
-
-                        ctx.globalAlpha = 0.8
-                        ctx.drawImage(hintImg, hintX, hintY, hintW, hintH)
-                        ctx.globalAlpha = 1
-                    }
 
                 } else if (gameState === 'START') {
                     // Draw Background Image if loaded, otherwise dark fills
