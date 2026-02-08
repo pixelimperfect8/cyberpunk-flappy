@@ -199,7 +199,6 @@ const GameEngine = () => {
     const spotlightLockedOn = useRef(false)
     const spotlightLockTime = useRef(0)
     const spotlightLeftBehind = useRef(false)
-    const SPOTLIGHT_DURATION = 7000 // total spotlight event ~7 seconds
     const SPOTLIGHT_LOCK_DELAY = 2500 // start locking after 2.5s
     const SPOTLIGHT_LEAVE_DELAY = 4500 // stop following after 4.5s
 
@@ -1989,12 +1988,12 @@ const GameEngine = () => {
 
                     if (spotlightActive.current) {
                         const elapsed = now - spotlightStartTime.current
-                        if (elapsed > SPOTLIGHT_DURATION) {
+
+                        // Deactivate when scrolled off-screen
+                        if (spotlightX.current < -100 * scale) {
                             spotlightActive.current = false
                         } else {
                             const fadeIn = Math.min(1, elapsed / 600)
-                            const fadeOut = elapsed > SPOTLIGHT_DURATION - 1000 ? Math.max(0, (SPOTLIGHT_DURATION - elapsed) / 1000) : 1
-                            const fade = fadeIn * fadeOut
 
                             const birdCenterX = scaledBirdX + scaledBirdSize / 2
                             const birdCenterY = birdY.current + scaledBirdSize / 2
@@ -2011,9 +2010,8 @@ const GameEngine = () => {
                             }
 
                             if (spotlightLeftBehind.current) {
-                                // Stay where it is — Dicky moves away
-                                // Slight drift downward to feel natural
-                                spotlightY.current += 0.3 * scale
+                                // Scroll left with the camera (same speed as pipes)
+                                spotlightX.current -= scaledPipeSpeed
                             } else if (spotlightLockedOn.current) {
                                 // Smoothly lerp toward Dicky
                                 const lockProgress = Math.min(1, (now - spotlightLockTime.current) / 800)
@@ -2038,7 +2036,7 @@ const GameEngine = () => {
                             const radius = 85 * scale
                             ctx.save()
                             ctx.globalCompositeOperation = 'lighter'
-                            ctx.globalAlpha = 0.28 * fade
+                            ctx.globalAlpha = 0.28 * fadeIn
                             ctx.fillStyle = '#ffffff'
                             ctx.beginPath()
                             ctx.arc(spotlightX.current, spotlightY.current, radius, 0, Math.PI * 2)
