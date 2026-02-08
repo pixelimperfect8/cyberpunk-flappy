@@ -1241,6 +1241,10 @@ const GameEngine = () => {
                     }
 
                     // Glow ring
+                    if (showBirdGlow.current) {
+                        ctx.shadowColor = '#00ff00'
+                        ctx.shadowBlur = 15 * scale
+                    }
                     ctx.strokeStyle = '#44ff44'
                     ctx.lineWidth = 2 * scale
                     ctx.beginPath()
@@ -1295,6 +1299,10 @@ const GameEngine = () => {
                     }
 
                     // Glow ring
+                    if (showBirdGlow.current) {
+                        ctx.shadowColor = '#0088ff'
+                        ctx.shadowBlur = 15 * scale
+                    }
                     ctx.strokeStyle = '#4488ff'
                     ctx.lineWidth = 2 * scale
                     ctx.beginPath()
@@ -1409,6 +1417,14 @@ const GameEngine = () => {
                         ctx.beginPath()
                         ctx.arc(proj.x + 6 * scale, proj.y, 10 * scale, 0, Math.PI * 2)
                         ctx.fill()
+                        // Ultra: extra outer glow ring
+                        if (showBirdGlow.current) {
+                            ctx.globalAlpha = 0.12
+                            ctx.fillStyle = '#88ccff'
+                            ctx.beginPath()
+                            ctx.arc(proj.x + 4 * scale, proj.y, 18 * scale, 0, Math.PI * 2)
+                            ctx.fill()
+                        }
                         ctx.globalAlpha = 1
                     }
                     ctx.fillStyle = '#ffffff'
@@ -1429,8 +1445,10 @@ const GameEngine = () => {
                                 p.destroyed = true
                                 projectiles.current[i] = projectiles.current[projectiles.current.length - 1]
                                 projectiles.current.pop()
-                                // Spawn explosion particles (capped)
-                                const expCount = Math.min(15, 150 - explosionParticles.current.length)
+                                // Spawn explosion particles (capped, scaled by particle multiplier)
+                                const expBase = Math.round(15 * particleMultiplier.current)
+                                const expCap = Math.round(150 * particleMultiplier.current)
+                                const expCount = Math.min(expBase, expCap - explosionParticles.current.length)
                                 for (let k = 0; k < expCount; k++) {
                                     const angle = Math.random() * Math.PI * 2
                                     const speed = (3 + Math.random() * 5) * scale
@@ -1451,8 +1469,10 @@ const GameEngine = () => {
                                 p.destroyed = true
                                 projectiles.current[i] = projectiles.current[projectiles.current.length - 1]
                                 projectiles.current.pop()
-                                // Spawn explosion particles (capped)
-                                const expCount2 = Math.min(15, 150 - explosionParticles.current.length)
+                                // Spawn explosion particles (capped, scaled by particle multiplier)
+                                const expBase2 = Math.round(15 * particleMultiplier.current)
+                                const expCap2 = Math.round(150 * particleMultiplier.current)
+                                const expCount2 = Math.min(expBase2, expCap2 - explosionParticles.current.length)
                                 for (let k = 0; k < expCount2; k++) {
                                     const angle = Math.random() * Math.PI * 2
                                     const speed = (3 + Math.random() * 5) * scale
@@ -1648,7 +1668,8 @@ const GameEngine = () => {
                             if (godMode.current) {
                                 // God mode: explode the building on touch
                                 p.destroyed = true
-                                for (let k = 0; k < 20; k++) {
+                                const godExpCount = Math.round(20 * particleMultiplier.current)
+                                for (let k = 0; k < godExpCount; k++) {
                                     const angle = Math.random() * Math.PI * 2
                                     const speed = (3 + Math.random() * 6) * scale
                                     explosionParticles.current.push({
@@ -1713,7 +1734,7 @@ const GameEngine = () => {
 
                 if (acidRainActive && acidRainEnabled.current && !suppressRain) {
                     // Spawn new rain drops (slight diagonal for speed effect)
-                    if (Math.random() < 0.3 && rainDrops.current.length < 200) {
+                    if (Math.random() < 0.3 * particleMultiplier.current && rainDrops.current.length < Math.round(200 * particleMultiplier.current)) {
                         rainDrops.current.push({
                             x: Math.random() * (canvas.width + 50),  // Across the top
                             y: -10 - Math.random() * 30,
@@ -1893,7 +1914,7 @@ const GameEngine = () => {
                     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
                     // Spawn new sand particles (horizontal wind)
-                    if (Math.random() < 0.5 && sandParticles.current.length < 300) {
+                    if (Math.random() < 0.5 * particleMultiplier.current && sandParticles.current.length < Math.round(300 * particleMultiplier.current)) {
                         sandParticles.current.push({
                             x: -10 - Math.random() * 50,
                             y: Math.random() * canvas.height,
