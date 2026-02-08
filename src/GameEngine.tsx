@@ -291,7 +291,7 @@ const GameEngine = () => {
     // Jump Hint Assets
     const jumpHintDefault = useRef<HTMLImageElement | null>(null)
     const jumpHintPressed = useRef<HTMLImageElement | null>(null)
-    const [isJumpPressed, setIsJumpPressed] = useState(false)
+    const isJumpPressed = useRef(false)
     const jumpPressTimer = useRef<any>(null)
 
     // Audio
@@ -739,9 +739,9 @@ const GameEngine = () => {
             birdVelocity.current = LIFT * scale * mobileSpeedMult
 
             // Visual Hint Feedback
-            setIsJumpPressed(true)
+            isJumpPressed.current = true
             if (jumpPressTimer.current) clearTimeout(jumpPressTimer.current)
-            jumpPressTimer.current = setTimeout(() => setIsJumpPressed(false), 150)
+            jumpPressTimer.current = setTimeout(() => { isJumpPressed.current = false }, 150)
 
 
 
@@ -2636,11 +2636,12 @@ const GameEngine = () => {
 
                     // === JUMP HINT UI ===
                     if (gameState === 'PLAYING' && jumpHintDefault.current && jumpHintPressed.current) {
-                        const hintImg = isJumpPressed ? jumpHintPressed.current : jumpHintDefault.current
+                        const hintImg = isJumpPressed.current ? jumpHintPressed.current : jumpHintDefault.current
                         const hintW = 120 * scale
                         const hintH = hintW * (hintImg.height / hintImg.width)
                         const hintX = centerX - hintW / 2
-                        const hintY = canvas.height - hintH - 10 * scale
+                        // Moved up 12px (10 + 12 = 22)
+                        const hintY = canvas.height - hintH - 22 * scale
 
                         ctx.globalAlpha = 0.8
                         ctx.drawImage(hintImg, hintX, hintY, hintW, hintH)
