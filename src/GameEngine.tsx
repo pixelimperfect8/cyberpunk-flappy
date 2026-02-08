@@ -182,6 +182,24 @@ const GameEngine = () => {
     const LEVEL_2_SCORE = 150
     const LEVEL_2_OVERLAY_END = 300
 
+    // Ultra VFX: pill pickup particle burst
+    const pillPickupParticles = useRef<{ x: number, y: number, vx: number, vy: number, life: number, maxLife: number, color: string, size: number }[]>([])
+
+    // Ultra VFX: background rain layer (drawn behind main rain)
+    const bgRainDrops = useRef<{ x: number, y: number, speed: number, length: number, vx: number }[]>([])
+
+    // Ultra VFX: spotlight system
+    const spotlightLastCheck = useRef(0) // timestamp of last 35s check
+    const spotlightActive = useRef(false)
+    const spotlightStartTime = useRef(0)
+    const spotlightAngle = useRef(0) // current sweep angle
+    const spotlightX = useRef(0) // origin X
+    const spotlightY = useRef(0) // origin Y  
+    const spotlightLockedOn = useRef(false)
+    const spotlightLockTime = useRef(0)
+    const SPOTLIGHT_DURATION = 6000 // total spotlight event ~6 seconds
+    const SPOTLIGHT_LOCK_DELAY = 2500 // start locking after 2.5s
+
     // Dev mode controls
     const [devModeOpen, setDevModeOpen] = useState(false)
     const greenPillsEnabled = useRef(true)
@@ -521,6 +539,11 @@ const GameEngine = () => {
         bossIntroStartTime.current = 0
         bossMessageIndex.current = 0
         bossCharIndex.current = 0
+        // Reset Ultra VFX
+        pillPickupParticles.current = []
+        bgRainDrops.current = []
+        spotlightActive.current = false
+        spotlightLastCheck.current = 0
         setGameState('START')
     }
 
@@ -1258,6 +1281,23 @@ const GameEngine = () => {
                         powerUpEndTime.current = Date.now() + 5000
                         pill.current = null
                         playPillSound() // Play sound on pill collect
+                        // Ultra: pill pickup particle burst
+                        if (showBirdGlow.current) {
+                            const burstCount = Math.round(18 * particleMultiplier.current)
+                            for (let k = 0; k < burstCount; k++) {
+                                const angle = Math.random() * Math.PI * 2
+                                const speed = (2 + Math.random() * 5) * scale
+                                pillPickupParticles.current.push({
+                                    x: px, y: py,
+                                    vx: Math.cos(angle) * speed,
+                                    vy: Math.sin(angle) * speed,
+                                    life: 40 + Math.floor(Math.random() * 20),
+                                    maxLife: 60,
+                                    color: Math.random() > 0.5 ? '#00ff00' : '#44ff88',
+                                    size: (3 + Math.random() * 4) * scale
+                                })
+                            }
+                        }
                     }
 
                     if (pill.current && pill.current.x < -50 * scale) {
@@ -1317,6 +1357,23 @@ const GameEngine = () => {
                         bluePillEndTime.current = Date.now() + BLUE_PILL_DURATION
                         bluePill.current = null
                         playPillSound() // Play sound on pill collect
+                        // Ultra: blue pill pickup particle burst
+                        if (showBirdGlow.current) {
+                            const burstCount = Math.round(18 * particleMultiplier.current)
+                            for (let k = 0; k < burstCount; k++) {
+                                const angle = Math.random() * Math.PI * 2
+                                const speed = (2 + Math.random() * 5) * scale
+                                pillPickupParticles.current.push({
+                                    x: bpx, y: bpy,
+                                    vx: Math.cos(angle) * speed,
+                                    vy: Math.sin(angle) * speed,
+                                    life: 40 + Math.floor(Math.random() * 20),
+                                    maxLife: 60,
+                                    color: Math.random() > 0.5 ? '#0088ff' : '#44aaff',
+                                    size: (3 + Math.random() * 4) * scale
+                                })
+                            }
+                        }
                     }
 
                     if (bluePill.current && bluePill.current.x < -50 * scale) {
@@ -1377,6 +1434,23 @@ const GameEngine = () => {
                         powerUpEndTime.current = Date.now() + POSTER_DURATION
                         poster.current = null
                         playPillSound()
+                        // Ultra: poster pickup particle burst
+                        if (showBirdGlow.current) {
+                            const burstCount = Math.round(22 * particleMultiplier.current)
+                            for (let k = 0; k < burstCount; k++) {
+                                const angle = Math.random() * Math.PI * 2
+                                const speed = (2 + Math.random() * 6) * scale
+                                pillPickupParticles.current.push({
+                                    x: ppx, y: ppy,
+                                    vx: Math.cos(angle) * speed,
+                                    vy: Math.sin(angle) * speed,
+                                    life: 45 + Math.floor(Math.random() * 20),
+                                    maxLife: 65,
+                                    color: Math.random() > 0.5 ? '#ff8800' : '#ffcc44',
+                                    size: (4 + Math.random() * 5) * scale
+                                })
+                            }
+                        }
                     }
 
                     if (poster.current && poster.current.x < -50 * scale) {
@@ -1733,6 +1807,37 @@ const GameEngine = () => {
                 const suppressRain = sandstormActiveRef.current || isApproachingSandstorm
 
                 if (acidRainActive && acidRainEnabled.current && !suppressRain) {
+                    // Ultra: background rain layer (lower opacity, thinner, different speed)
+                    if (showBirdGlow.current) {
+                        if (Math.random() < 0.25 && bgRainDrops.current.length < 150) {
+                            bgRainDrops.current.push({
+                                x: Math.random() * (canvas.width + 80),
+                                y: -20 - Math.random() * 50,
+                                speed: (3 + Math.random() * 2) * scale,
+                                length: (30 + Math.random() * 35) * scale,
+                                vx: -(0.5 + Math.random() * 0.3) * scale
+                            })
+                        }
+                        // Update and draw background rain
+                        for (let i = bgRainDrops.current.length - 1; i >= 0; i--) {
+                            const drop = bgRainDrops.current[i]
+                            drop.y += drop.speed
+                            drop.x += drop.vx
+                            ctx.globalAlpha = 0.12
+                            ctx.strokeStyle = '#66cc00'
+                            ctx.lineWidth = 3 * scale
+                            ctx.beginPath()
+                            ctx.moveTo(drop.x, drop.y)
+                            ctx.lineTo(drop.x - drop.vx * 2.5, drop.y + drop.length)
+                            ctx.stroke()
+                            ctx.globalAlpha = 1
+                            if (drop.y > canvas.height || drop.x < -60) {
+                                bgRainDrops.current[i] = bgRainDrops.current[bgRainDrops.current.length - 1]
+                                bgRainDrops.current.pop()
+                            }
+                        }
+                    }
+
                     // Spawn new rain drops (slight diagonal for speed effect)
                     if (Math.random() < 0.3 * particleMultiplier.current && rainDrops.current.length < Math.round(200 * particleMultiplier.current)) {
                         rainDrops.current.push({
@@ -1825,6 +1930,122 @@ const GameEngine = () => {
                     ctx.fillStyle = '#88ff00'
                     ctx.font = `bold ${12 * scale}px monospace`
                     ctx.fillText('ACID RAIN', canvas.width - 90 * scale, 30 * scale)
+                }
+
+                // Ultra: update and draw pill pickup particles
+                if (pillPickupParticles.current.length > 0) {
+                    for (let i = pillPickupParticles.current.length - 1; i >= 0; i--) {
+                        const p = pillPickupParticles.current[i]
+                        p.x += p.vx
+                        p.y += p.vy
+                        p.vy += 0.12 * scale // slight gravity
+                        p.vx *= 0.98 // friction
+                        p.life--
+                        const alpha = Math.max(0, p.life / p.maxLife)
+                        // Outer glow
+                        ctx.globalAlpha = alpha * 0.25
+                        ctx.fillStyle = p.color
+                        ctx.beginPath()
+                        ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2)
+                        ctx.fill()
+                        // Core
+                        ctx.globalAlpha = alpha
+                        ctx.beginPath()
+                        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = 1
+                        if (p.life <= 0) {
+                            pillPickupParticles.current[i] = pillPickupParticles.current[pillPickupParticles.current.length - 1]
+                            pillPickupParticles.current.pop()
+                        }
+                    }
+                }
+
+                // Ultra: Spotlight system (every 35s, 1/5 chance)
+                if (showBirdGlow.current) {
+                    const now = Date.now()
+                    if (!spotlightActive.current) {
+                        if (now - spotlightLastCheck.current > 35000) {
+                            spotlightLastCheck.current = now
+                            if (Math.random() < 0.2) {
+                                // Activate spotlight!
+                                spotlightActive.current = true
+                                spotlightStartTime.current = now
+                                spotlightAngle.current = Math.random() * Math.PI * 2
+                                spotlightX.current = canvas.width * (0.3 + Math.random() * 0.4)
+                                spotlightY.current = -20
+                                spotlightLockedOn.current = false
+                            }
+                        }
+                    }
+
+                    if (spotlightActive.current) {
+                        const elapsed = now - spotlightStartTime.current
+                        if (elapsed > SPOTLIGHT_DURATION) {
+                            spotlightActive.current = false
+                        } else {
+                            const fadeIn = Math.min(1, elapsed / 500)
+                            const fadeOut = elapsed > SPOTLIGHT_DURATION - 800 ? Math.max(0, (SPOTLIGHT_DURATION - elapsed) / 800) : 1
+                            const fade = fadeIn * fadeOut
+
+                            // Sweeping motion
+                            if (!spotlightLockedOn.current && elapsed > SPOTLIGHT_LOCK_DELAY) {
+                                spotlightLockedOn.current = true
+                                spotlightLockTime.current = now
+                            }
+
+                            let targetAngle: number
+                            if (spotlightLockedOn.current) {
+                                // Lock onto bird with smooth lerp
+                                const lockProgress = Math.min(1, (now - spotlightLockTime.current) / 800)
+                                const birdAngle = Math.atan2(
+                                    birdY.current + scaledBirdSize / 2 - spotlightY.current,
+                                    scaledBirdX + scaledBirdSize / 2 - spotlightX.current
+                                )
+                                targetAngle = spotlightAngle.current + (birdAngle - spotlightAngle.current) * lockProgress
+                            } else {
+                                // Sweep around
+                                targetAngle = spotlightAngle.current + 0.015
+                            }
+                            spotlightAngle.current = targetAngle
+
+                            // Draw spotlight beam (conical)
+                            const beamLength = canvas.height * 1.3
+                            const coneWidth = 0.15 // radians
+
+                            ctx.save()
+                            const grad = ctx.createRadialGradient(
+                                spotlightX.current, spotlightY.current, 0,
+                                spotlightX.current, spotlightY.current, beamLength
+                            )
+                            grad.addColorStop(0, `rgba(255, 255, 255, ${0.18 * fade})`)
+                            grad.addColorStop(0.3, `rgba(200, 220, 255, ${0.08 * fade})`)
+                            grad.addColorStop(1, 'rgba(200, 220, 255, 0)')
+
+                            ctx.fillStyle = grad
+                            ctx.beginPath()
+                            ctx.moveTo(spotlightX.current, spotlightY.current)
+                            ctx.arc(spotlightX.current, spotlightY.current, beamLength,
+                                spotlightAngle.current - coneWidth,
+                                spotlightAngle.current + coneWidth)
+                            ctx.closePath()
+                            ctx.fill()
+
+                            // Bright center line
+                            ctx.globalAlpha = 0.12 * fade
+                            ctx.strokeStyle = '#ffffff'
+                            ctx.lineWidth = 2 * scale
+                            ctx.beginPath()
+                            ctx.moveTo(spotlightX.current, spotlightY.current)
+                            ctx.lineTo(
+                                spotlightX.current + Math.cos(spotlightAngle.current) * beamLength * 0.8,
+                                spotlightY.current + Math.sin(spotlightAngle.current) * beamLength * 0.8
+                            )
+                            ctx.stroke()
+                            ctx.globalAlpha = 1
+                            ctx.restore()
+                        }
+                    }
                 }
 
                 // Still draw existing rain drops draining off during transition
