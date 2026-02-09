@@ -292,23 +292,32 @@ const GameEngine = () => {
     // Audio
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const menuAudioRef = useRef<HTMLAudioElement | null>(null)
+    const citySoundsRef = useRef<HTMLAudioElement | null>(null)
     const songLevel = useRef(1) // Track current song (1 = background.mp3, 2 = level2.mp3)
 
     // Audio State Management
     useEffect(() => {
         const menuAudio = menuAudioRef.current
         const gameAudio = audioRef.current
+        const citySounds = citySoundsRef.current
 
         const updateAudio = () => {
-            if (!menuAudio || !gameAudio) return
+            if (!menuAudio || !gameAudio || !citySounds) return
 
             menuAudio.volume = isMuted ? 0 : volume
             gameAudio.volume = isMuted ? 0 : volume
+            citySounds.volume = (isMuted ? 0 : volume) * 0.65
 
             if (isMuted) {
                 menuAudio.pause()
                 gameAudio.pause()
+                citySounds.pause()
                 return
+            }
+
+            // Global Ambient Loop
+            if (citySounds.paused) {
+                citySounds.play().catch(() => { })
             }
 
             if (gameState === 'PLAYING') {
@@ -3325,6 +3334,12 @@ const GameEngine = () => {
             <audio
                 ref={menuAudioRef}
                 src="/menu.mp3"
+                preload="auto"
+                loop
+            />
+            <audio
+                ref={citySoundsRef}
+                src="/citysounds.mp3"
                 preload="auto"
                 loop
             />
