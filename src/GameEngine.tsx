@@ -888,7 +888,7 @@ const GameEngine = () => {
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return
-        const ctx = canvas.getContext('2d')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: false })
         if (!ctx) return
 
         const scale = getScale()
@@ -1134,11 +1134,15 @@ const GameEngine = () => {
                         ctx.fillRect(x, y, w * dir, h)
                         ctx.fillStyle = '#ff4444'
                         ctx.fillRect(x + (dir > 0 ? scale : w - 3 * scale), y + h / 2 - 2 * scale, 3 * scale, 4 * scale)
+                        // Manual glow: faded larger rect behind headlight
+                        const hlX = x + (dir > 0 ? w - 4 * scale : scale)
+                        const hlY = y + h / 2 - scale
+                        ctx.globalAlpha = 0.4
                         ctx.fillStyle = '#ffffcc'
-                        ctx.shadowColor = '#ffffcc'
-                        ctx.shadowBlur = 4 * scale
-                        ctx.fillRect(x + (dir > 0 ? w - 4 * scale : scale), y + h / 2 - scale, 3 * scale, 2 * scale)
-                        ctx.shadowBlur = 0
+                        ctx.fillRect(hlX - 2 * scale, hlY - 2 * scale, 7 * scale, 6 * scale)
+                        ctx.globalAlpha = 1
+                        ctx.fillStyle = '#ffffcc'
+                        ctx.fillRect(hlX, hlY, 3 * scale, 2 * scale)
                     }
 
                     drawFlyingCar((globalTime * 1.5) % (W + 60 * scale) - 30 * scale, 85 * scale, 1, 0.8)
@@ -1164,12 +1168,13 @@ const GameEngine = () => {
                     const cartH = cartW * (railcartSprite.current.height / railcartSprite.current.width)
                     const cartY = TOP_RAIL_Y - cartH
 
-                    // Teal glow underneath the railcart
-                    ctx.shadowColor = '#00ffff'
-                    ctx.shadowBlur = 20 * scale
+                    // Manual glow: larger faded rect behind railcart undercarriage
+                    ctx.globalAlpha = 0.25
+                    ctx.fillStyle = '#00ffff'
+                    ctx.fillRect(railcart.current.x - 5 * scale, TOP_RAIL_Y - 12 * scale, cartW + 10 * scale, 24 * scale)
+                    ctx.globalAlpha = 1
                     ctx.fillStyle = '#00ffff'
                     ctx.fillRect(railcart.current.x + 5 * scale, TOP_RAIL_Y - 3 * scale, cartW - 10 * scale, 6 * scale)
-                    ctx.shadowBlur = 0
 
                     // Draw the railcart
                     ctx.drawImage(railcartSprite.current, railcart.current.x, cartY, cartW, cartH)
@@ -1205,12 +1210,12 @@ const GameEngine = () => {
                 ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)'
                 ctx.lineWidth = scale
                 const gridOffset = (globalTime * 0.3) % (15 * scale)
+                ctx.beginPath()
                 for (let gx = -15 * scale; gx < W + 15 * scale; gx += 15 * scale) {
-                    ctx.beginPath()
                     ctx.moveTo(gx - gridOffset, GROUND_Y)
                     ctx.lineTo(gx - gridOffset - 8 * scale, H)
-                    ctx.stroke()
                 }
+                ctx.stroke()
 
                 // === BEACON LIGHTS ===
                 if (showBeacons.current) {
@@ -1267,7 +1272,7 @@ const GameEngine = () => {
                 if (showFog.current) {
                     const fgFogOffset = (globalTime * 0.4) % (W * 1.5)
 
-                    for (let fx = -100 * scale; fx < W + 200 * scale; fx += 40 * scale) {
+                    for (let fx = -100 * scale; fx < W + 200 * scale; fx += 80 * scale) {
                         const fogY = GROUND_Y - 30 * scale + Math.sin((fx + fgFogOffset) * 0.015) * 12 * scale
                         const fogW = (70 + Math.sin(fx * 0.03 + globalTime * 0.01) * 25) * scale
                         const fogH = (18 + Math.sin(fx * 0.02) * 6) * scale
@@ -1320,14 +1325,22 @@ const GameEngine = () => {
                 ctx.translate(birdCenterX, birdCenterY)
                 ctx.rotate(birdRotation.current)
 
-                // Apply glow effects (gated behind birdGlow setting - Ultra only by default)
+                // Manual glow for bird (Ultra only)
                 if (showBirdGlow.current) {
                     if (bluePillActive.current) {
-                        ctx.shadowColor = '#0088ff'
-                        ctx.shadowBlur = 20 * scale
+                        ctx.globalAlpha = 0.3
+                        ctx.fillStyle = '#0088ff'
+                        ctx.beginPath()
+                        ctx.arc(0, 0, scaledBirdSize * 1.5, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = 1
                     } else if (powerUpActive.current) {
-                        ctx.shadowColor = '#00ff00'
-                        ctx.shadowBlur = 20 * scale
+                        ctx.globalAlpha = 0.3
+                        ctx.fillStyle = '#00ff00'
+                        ctx.beginPath()
+                        ctx.arc(0, 0, scaledBirdSize * 1.5, 0, Math.PI * 2)
+                        ctx.fill()
+                        ctx.globalAlpha = 1
                     }
                 }
 
@@ -1337,11 +1350,12 @@ const GameEngine = () => {
                     const spriteW = scaledBirdSize * 3.5
                     const spriteH = scaledBirdSize * 2.5
                     if (showBirdGlow.current) {
-                        ctx.shadowColor = '#ff8800'
-                        ctx.shadowBlur = 25 * scale
+                        // Manual glow: enlarged faded copy behind poster bird
+                        ctx.globalAlpha = 0.3
+                        ctx.drawImage(dickyAlt2.current, -spriteW / 2 - 6 * scale, -spriteH / 2 - 6 * scale, spriteW + 12 * scale, spriteH + 12 * scale)
+                        ctx.globalAlpha = 1
                     }
                     ctx.drawImage(dickyAlt2.current, -spriteW / 2, -spriteH / 2, spriteW, spriteH)
-                    ctx.shadowBlur = 0
                 } else if (bluePillActive.current && dickyBigSprite.current) {
                     // Blue pill transformation - use big dicky sprite!
                     const spriteW = scaledBirdSize * 3.5  // Even bigger for transformation
@@ -1449,15 +1463,20 @@ const GameEngine = () => {
 
                         // Glow ring
                         if (showBirdGlow.current) {
-                            ctx.shadowColor = '#00ff00'
-                            ctx.shadowBlur = 15 * scale
+                            // Manual glow: faded wider ring
+                            ctx.globalAlpha = 0.25
+                            ctx.strokeStyle = '#00ff00'
+                            ctx.lineWidth = 6 * scale
+                            ctx.beginPath()
+                            ctx.ellipse(px, py, tabletWidth + 6 * scale, tabletHeight + 6 * scale, 0, 0, Math.PI * 2)
+                            ctx.stroke()
+                            ctx.globalAlpha = 1
                         }
                         ctx.strokeStyle = '#44ff44'
                         ctx.lineWidth = 2 * scale
                         ctx.beginPath()
                         ctx.ellipse(px, py, tabletWidth + 4 * scale, tabletHeight + 4 * scale, 0, 0, Math.PI * 2)
                         ctx.stroke()
-                        ctx.shadowBlur = 0
 
                         if (scaledBirdX < px + tabletWidth && scaledBirdX + scaledBirdSize > px - tabletWidth &&
                             birdY.current < py + tabletHeight && birdY.current + scaledBirdSize > py - tabletHeight) {
@@ -1524,15 +1543,20 @@ const GameEngine = () => {
 
                         // Glow ring
                         if (showBirdGlow.current) {
-                            ctx.shadowColor = '#0088ff'
-                            ctx.shadowBlur = 15 * scale
+                            // Manual glow: faded wider ring
+                            ctx.globalAlpha = 0.25
+                            ctx.strokeStyle = '#0088ff'
+                            ctx.lineWidth = 6 * scale
+                            ctx.beginPath()
+                            ctx.ellipse(bpx, bpy, bpWidth + 6 * scale, bpHeight + 6 * scale, 0, 0, Math.PI * 2)
+                            ctx.stroke()
+                            ctx.globalAlpha = 1
                         }
                         ctx.strokeStyle = '#4488ff'
                         ctx.lineWidth = 2 * scale
                         ctx.beginPath()
                         ctx.ellipse(bpx, bpy, bpWidth + 4 * scale, bpHeight + 4 * scale, 0, 0, Math.PI * 2)
                         ctx.stroke()
-                        ctx.shadowBlur = 0
 
                         // Collision detection
                         if (scaledBirdX < bpx + bpWidth && scaledBirdX + scaledBirdSize > bpx - bpWidth &&
@@ -2471,7 +2495,6 @@ const GameEngine = () => {
                         if (isGlitching) {
                             // === CYBERPUNK GLITCH EFFECT ===
                             const glitchIntensity = 1 - (elapsed / BOSS_GLITCH_DURATION) * 0.7
-                            const t = Date.now()
 
                             // Screen flash
                             if (Math.random() < 0.1 * glitchIntensity) {
@@ -2489,15 +2512,17 @@ const GameEngine = () => {
                                 }
                             }
 
-                            // Neon yellow border with glitch
-                            ctx.shadowColor = '#ffff00'
-                            ctx.shadowBlur = (15 + Math.sin(t * 0.02) * 10) * scale * glitchIntensity
+                            // Neon yellow border with glitch (manual glow)
+                            ctx.globalAlpha = 0.3 * glitchIntensity
                             ctx.strokeStyle = '#ffff00'
-                            ctx.lineWidth = 3 * scale
+                            ctx.lineWidth = 8 * scale
                             const offsetX = (Math.random() - 0.5) * 8 * scale * glitchIntensity
                             const offsetY = (Math.random() - 0.5) * 8 * scale * glitchIntensity
                             ctx.strokeRect(faceX + offsetX, faceY + offsetY, faceSize, faceSize)
-                            ctx.shadowBlur = 0
+                            ctx.globalAlpha = 1
+                            ctx.strokeStyle = '#ffff00'
+                            ctx.lineWidth = 3 * scale
+                            ctx.strokeRect(faceX + offsetX, faceY + offsetY, faceSize, faceSize)
 
                             // Draw boss with RGB split glitch
                             if (bossSprite.current) {
@@ -2515,23 +2540,26 @@ const GameEngine = () => {
                             // Glitch text flicker
                             if (Math.random() < 0.4) {
                                 ctx.fillStyle = '#ffff00'
-                                ctx.shadowColor = '#ffff00'
-                                ctx.shadowBlur = 10 * scale
                                 ctx.font = `bold ${14 * scale}px sans-serif`
                                 ctx.textAlign = 'left'
                                 const glitchTexts = ['INCOMING SIGNAL...', 'DECRYPTING...', '???', 'UNKNOWN ENTITY', 'WARNING']
+                                // Manual text glow: faded duplicate
+                                ctx.globalAlpha = 0.4
+                                ctx.fillText(glitchTexts[Math.floor(Math.random() * glitchTexts.length)], faceX + faceSize + 15 * scale + 1 * scale, faceY + 30 * scale + 1 * scale)
+                                ctx.globalAlpha = 1
                                 ctx.fillText(glitchTexts[Math.floor(Math.random() * glitchTexts.length)], faceX + faceSize + 15 * scale, faceY + 30 * scale)
-                                ctx.shadowBlur = 0
                             }
                         } else {
                             // === STABILIZED - Sequential messages ===
-                            // Neon yellow border (stable)
-                            ctx.shadowColor = '#ffff00'
-                            ctx.shadowBlur = 12 * scale
+                            // Neon yellow border (stable, manual glow)
+                            ctx.globalAlpha = 0.3
+                            ctx.strokeStyle = '#ffff00'
+                            ctx.lineWidth = 8 * scale
+                            ctx.strokeRect(faceX, faceY, faceSize, faceSize)
+                            ctx.globalAlpha = 1
                             ctx.strokeStyle = '#ffff00'
                             ctx.lineWidth = 3 * scale
                             ctx.strokeRect(faceX, faceY, faceSize, faceSize)
-                            ctx.shadowBlur = 0
 
                             // Draw boss face (stable)
                             if (bossSprite.current) {
@@ -2581,8 +2609,6 @@ const GameEngine = () => {
                                 // Draw current text with typewriter
                                 const displayText = currentMsg.substring(0, bossCharIndex.current)
                                 ctx.fillStyle = '#ffff00'
-                                ctx.shadowColor = '#ffff00'
-                                ctx.shadowBlur = 5 * scale
                                 ctx.font = `bold ${11 * scale}px sans-serif`
                                 ctx.textAlign = 'left'
 
@@ -2638,11 +2664,11 @@ const GameEngine = () => {
                         const logoX = centerX - logoW / 2
                         const logoY = canvas.height * 0.1 // Higher up (Top 10%)
 
-                        // Shadow for pop
-                        ctx.shadowColor = '#00ffff'
-                        ctx.shadowBlur = 20 * scale
+                        // Manual glow: enlarged faded copy behind logo
+                        ctx.globalAlpha = 0.3
+                        ctx.drawImage(logoSprite.current, logoX - 4 * scale, logoY - 4 * scale, logoW + 8 * scale, logoH + 8 * scale)
+                        ctx.globalAlpha = 1
                         ctx.drawImage(logoSprite.current, logoX, logoY, logoW, logoH)
-                        ctx.shadowBlur = 0
                     }
 
                     const active = mouseMenuItem.current >= 0 ? mouseMenuItem.current : selectedMenuItem.current
@@ -2666,16 +2692,14 @@ const GameEngine = () => {
                             const tealNeon = '#00ffff';
                             ctx.fillStyle = isActive ? tealNeon : '#ffffff';
 
-                            if (isActive) {
-                                ctx.shadowColor = tealNeon;
-                                ctx.shadowBlur = 10 * scale;
-                            } else {
-                                ctx.shadowBlur = 0;
-                            }
-
                             // Draw Text
+                            if (isActive) {
+                                // Manual text glow: faded duplicate offset
+                                ctx.globalAlpha = 0.35;
+                                ctx.fillText(label, centerX + 1 * scale, y + 1 * scale);
+                                ctx.globalAlpha = 1;
+                            }
                             ctx.fillText(label, centerX, y);
-                            ctx.shadowBlur = 0; // Reset shadow
 
                             // Draw Teal Neon Pixel Arrow Cursor if active
                             if (isActive) {
@@ -2684,8 +2708,14 @@ const GameEngine = () => {
                                 const arrowY = y;
 
                                 ctx.fillStyle = tealNeon; // Teal Neon
-                                ctx.shadowColor = tealNeon;
-                                ctx.shadowBlur = 10 * scale;
+                                // Manual glow: faded larger arrow
+                                ctx.globalAlpha = 0.3;
+                                ctx.beginPath();
+                                ctx.moveTo(arrowX - 2 * scale, arrowY - arrowSize / 2 - 2 * scale);
+                                ctx.lineTo(arrowX + arrowSize + 2 * scale, arrowY);
+                                ctx.lineTo(arrowX - 2 * scale, arrowY + arrowSize / 2 + 2 * scale);
+                                ctx.fill();
+                                ctx.globalAlpha = 1;
 
                                 ctx.beginPath();
                                 // Pixel-style arrow (triangle)
@@ -2693,7 +2723,6 @@ const GameEngine = () => {
                                 ctx.lineTo(arrowX + arrowSize, arrowY);
                                 ctx.lineTo(arrowX, arrowY + arrowSize / 2);
                                 ctx.fill();
-                                ctx.shadowBlur = 0;
                             }
                         }
 
@@ -2720,13 +2749,15 @@ const GameEngine = () => {
                         ctx.roundRect(panelX, panelY, panelW, panelH, 10 * scale)
                         ctx.fill()
 
-                        // Border with Glow
-                        ctx.shadowColor = '#00ffff'
-                        ctx.shadowBlur = 10 * scale
+                        // Border with manual glow
+                        ctx.globalAlpha = 0.3
+                        ctx.strokeStyle = '#00ffff'
+                        ctx.lineWidth = 6 * scale
+                        ctx.stroke()
+                        ctx.globalAlpha = 1
                         ctx.strokeStyle = '#00ffff'
                         ctx.lineWidth = 2 * scale
                         ctx.stroke()
-                        ctx.shadowBlur = 0
 
                         // === TABS ===
                         const tabW = panelW / 2
@@ -2738,15 +2769,10 @@ const GameEngine = () => {
 
                             // Tab Background
                             ctx.fillStyle = isActiveTab ? 'rgba(0, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.5)'
-                            if (isActiveTab) {
-                                ctx.shadowColor = '#00ffff'
-                                ctx.shadowBlur = 15 * scale
-                            }
                             ctx.beginPath()
                             // Round top corners only
                             ctx.roundRect(tabX, panelY, tabW, tabH, [10 * scale, 10 * scale, 0, 0])
                             ctx.fill()
-                            ctx.shadowBlur = 0
 
                             // Tab Text
                             ctx.fillStyle = isActiveTab ? '#ffffff' : '#8899aa'
@@ -2881,12 +2907,13 @@ const GameEngine = () => {
                     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
                     ctx.fillStyle = '#00ffff'
-                    ctx.shadowColor = '#00ffff'
-                    ctx.shadowBlur = 15 * scale
                     ctx.textAlign = 'center'
                     ctx.font = `bold ${36 * scale}px "Press Start 2P", monospace`
+                    // Manual text glow
+                    ctx.globalAlpha = 0.35
+                    ctx.fillText('PAUSED', canvas.width / 2 + 2 * scale, canvas.height / 2 + 2 * scale)
+                    ctx.globalAlpha = 1
                     ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2)
-                    ctx.shadowBlur = 0
 
                     ctx.fillStyle = 'white'
                     ctx.font = `${12 * scale}px "Press Start 2P", monospace`
@@ -2903,10 +2930,11 @@ const GameEngine = () => {
                         const hoverY = Math.sin(globalTime * 0.05) * 10 * scale
                         const logoY = canvas.height * 0.2 + hoverY
 
-                        ctx.shadowColor = '#00ffff'
-                        ctx.shadowBlur = 20 * scale
+                        // Manual glow: enlarged faded copy behind logo
+                        ctx.globalAlpha = 0.3
+                        ctx.drawImage(logoSprite.current, logoX - 4 * scale, logoY - 4 * scale, logoW + 8 * scale, logoH + 8 * scale)
+                        ctx.globalAlpha = 1
                         ctx.drawImage(logoSprite.current, logoX, logoY, logoW, logoH)
-                        ctx.shadowBlur = 0
                     }
 
                     // Blinking "PRESS START" - WITH PIXEL FONT
@@ -2914,11 +2942,11 @@ const GameEngine = () => {
                         ctx.fillStyle = '#00ffff'
                         ctx.font = `${24 * scale}px "Press Start 2P", monospace`
                         ctx.textAlign = 'center'
-                        ctx.shadowColor = '#00ffff'
-                        ctx.shadowBlur = 10 * scale
+                        // Manual text glow
+                        ctx.globalAlpha = 0.35
+                        ctx.fillText('PRESS START', centerX + 1 * scale, canvas.height * 0.7 + 1 * scale)
+                        ctx.globalAlpha = 1
                         ctx.fillText('PRESS START', centerX, canvas.height * 0.7)
-                        ctx.shadowBlur = 0
-                        ctx.shadowBlur = 0
                     }
 
                     // Version text on TITLE screen too
@@ -2958,30 +2986,32 @@ const GameEngine = () => {
                     ctx.fill()
                     ctx.stroke()
 
-                    // Glow border
-                    ctx.shadowColor = '#ff00ff'
-                    ctx.shadowBlur = 15 * scale
+                    // Glow border (manual)
+                    ctx.globalAlpha = 0.3
+                    ctx.strokeStyle = '#ff00ff'
+                    ctx.lineWidth = 6 * scale
                     ctx.beginPath()
                     ctx.roundRect(panelX, panelY, panelW, panelH, 12 * scale)
                     ctx.stroke()
-                    ctx.shadowBlur = 0
+                    ctx.globalAlpha = 1
 
                     // GAME OVER title
                     ctx.fillStyle = '#ff0066'
-                    ctx.shadowColor = '#ff0066'
-                    ctx.shadowBlur = 10 * scale
                     ctx.font = `bold ${28 * scale}px sans-serif`
                     ctx.textAlign = 'center'
+                    // Manual text glow
+                    ctx.globalAlpha = 0.35
+                    ctx.fillText('GAME OVER', centerX + 2 * scale, panelY + 35 * scale + 2 * scale)
+                    ctx.globalAlpha = 1
                     ctx.fillText('GAME OVER', centerX, panelY + 35 * scale)
-                    ctx.shadowBlur = 0
 
                     // Current score
                     ctx.fillStyle = '#00ffff'
-                    ctx.shadowColor = '#00ffff'
-                    ctx.shadowBlur = 8 * scale
                     ctx.font = `bold ${20 * scale}px sans-serif`
+                    ctx.globalAlpha = 0.35
+                    ctx.fillText(`SCORE: ${score}`, centerX + 1 * scale, panelY + 65 * scale + 1 * scale)
+                    ctx.globalAlpha = 1
                     ctx.fillText(`SCORE: ${score}`, centerX, panelY + 65 * scale)
-                    ctx.shadowBlur = 0
 
                     // Divider
                     ctx.strokeStyle = 'rgba(255, 0, 255, 0.3)'
@@ -3045,19 +3075,23 @@ const GameEngine = () => {
                 // Draw HUD (Score & Level) - Canvas based to avoid clipping/scaling issues
                 if (gameState === 'PLAYING' || gameState === 'GAME_OVER' || gameState === 'PAUSED') {
                     const uiColor = score >= LEVEL_2_SCORE ? '#ffff00' : '#00ffff'
-                    ctx.shadowColor = uiColor
-                    ctx.shadowBlur = 10 * scale
                     ctx.fillStyle = uiColor
                     ctx.font = `${24 * scale}px "Press Start 2P", monospace`
                     ctx.textAlign = 'left'
                     ctx.textBaseline = 'top'
+                    // Manual text glow
+                    ctx.globalAlpha = 0.3
+                    ctx.fillText(`${score}`, 20 * scale + 1 * scale, 20 * scale + 1 * scale)
+                    ctx.globalAlpha = 1
                     ctx.fillText(`${score}`, 20 * scale, 20 * scale)
 
                     ctx.textAlign = 'right'
                     ctx.font = `${16 * scale}px "Press Start 2P", monospace`
+                    ctx.globalAlpha = 0.3
+                    ctx.fillText(`LVL ${songLevel.current}`, canvas.width - 20 * scale + 1 * scale, 20 * scale + 1 * scale)
+                    ctx.globalAlpha = 1
                     ctx.fillText(`LVL ${songLevel.current}`, canvas.width - 20 * scale, 20 * scale)
 
-                    ctx.shadowBlur = 0
                     ctx.textBaseline = 'alphabetic' // Reset
                 }
             } catch (e) {
